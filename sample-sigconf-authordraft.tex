@@ -385,9 +385,50 @@ As illustrated by Algorithm \ref{alg:HyBinMAS}, HyBinMAS performs at least one i
 
 % For a target function, identified by its offset relative to the base address of the .so file, SIA is first employed to acquire its static information. This static information is then fed into the SAA as its primary input, prompting the corresponding LLM to generate semantic information about the function, including a proposed function name and summary. This semantic information, along with the static information from SIA, serves as input for the TCGA to construct corresponding test cases. Within the EA, we have established a Frida-based runtime environment for information acquisition. It accepts the test cases from TCGA and the basic information from SIA to execute the target function and capture its dynamic execution information (see Section xxx for details). The outputs from the preceding four Agents are all provided as part of the prompt to the VA. The VA's role is to validate the correctness of the semantic understanding produced by the SAA. If the understanding is deemed correct, it is accepted as the final result. Otherwise, the VA must provide detailed explanations and suggestions for revision. This feedback, along with the test cases and dynamic execution information, is passed back to the SAA for refinement. This process iterates until the VA's validation is successful or a predefined threshold is reached. In the following sections, we will discuss each agent in detail.
 
-\subsection{Static Information Agent Design}
 
-The SIA marks the starting point of the entire workflow. A target function (e.g., libnative-lib.so[+0x1234]) is first provided as input to the SIA. Here, BinMAS utilizes static analysis tools like Ghidra to analyze it, yielding disassembled code, decompiled C code, and metadata about the function (including its function signature, call graph, etc.). Consistent with prior research, BinMAS uses this static information as a basis for semantic inference. However, BinMAS goes a step further by integrating this static information with other sources, such as dynamic information, to jointly infer the semantics (see Section xxx for details).
+\subsection{Hybrid Static-and-Dynamic Analyzer Design}
+\label{sec:hsda_design}
+
+As the inaugural component of the \textbf{HyBinMAS} framework, the Hybrid Static-and-Dynamic Analyzer (HSDA) accepts a target function (e.g., \texttt{libnative-lib.so[+0x1234]}) and its containing binary as initial inputs to perform a hybrid static-dynamic analysis. Given that the HSDA serves as a foundational service, its output provides the essential basis for all subsequent stages. Existing research, such as SymGen, has demonstrated that decompiled code contributes more significantly to semantic comprehension than raw assembly code. Therefore, we designate the decompiled pseudo-code as a primary output of the HSDA module for downstream use. Building upon this foundation, the HSDA incorporates the following key advancements:
+
+We recognize that such pseudo-C code does not strictly represent the actual execution order. In contrast, assembly code maintains a high degree of fidelity with the sequence of executed instructions. Consequently, we designed the HSDA to also output the assembly code, which is specifically utilized by the downstream Execution Validator (EV). Furthermore, the HSDA is leveraged to extract the function's signature, encompassing the types and storage locations (e.g., registers or stack offsets) of its parameters and return value. This signature information not only provides fundamental support for the Semantic Restorer's (SR) inference process but also serves as a critical prerequisite for generating and executing test cases.
+
+To address Challenge C2, we posit that the function call context is indispensable for semantic understanding. Accordingly, we mandate that the HSDA must also furnish comprehensive call graph information. Notably, the prevalence of indirect calls in C/C++ (as exemplified in Figure~\ref{fig:xxx}) means that relying solely on static analysis is insufficient to guarantee the completeness of the call graph, which can adversely affect the efficacy of name recovery. Our approach resolves this by dynamically capturing inter-procedural call information within the binary and then employing Algorithm~\ref{alg:xxx} to augment the static call graph with this dynamically-obtained data.
+
+
+% 作为HyBinMAS的开端，HSDA接受一个待分析的函数（例如例如libnative-lib.so[+0x1234]）及其所在的二进制作为初始输入，进行动静态混合分析。由于HSDA是HyBinMAS框架的基础服务之一，其输出信息是其余环节的重要依据。现有的研究（SymGen）表明，相较于反汇编代码，反编译代码对函数语义理解的贡献度更大，所以我们也将反编译代码作为HSDA模块的一个重要输出供后续使用。在此基础上，HyBinMAS还做了如下突破：
+
+% 我们洞察到这样的伪C代码不能严格代表实际的执行顺序。相反，反汇编代码可以与实际执行的指令具有高度地对齐性。偶一我们在设计HSDA时也将反汇编代码作为另一个输出成分以供后续EV使用。我们还利用HSDA获取了函数的签名信息，包括参数与返回值的类型、存储位置等。这些信息除了为后续SR推理函数名提供基本的支持，还将作为生成与执行测试样例的重要依据。为了解决C2，我们指出在进行语义理解时应当考虑函数调用情况，所以我们在设计HSDA时也要求提供同样的调用信息。值得注意的是，由于C/C++中广泛存在间接调用的使用（例如图xxx），仅考虑静态调用信息将难以保证调用链的完整性，进而影响函数名恢复的效果。我们选择动态抓取了同一二进制文件内不同函数之间的调用信息，并使用算法xxx利用动态调用信息增强静态调用信息。
+
+
+\begin{algorithm}
+  \caption{Dynamic Enhanced Call Analysis}
+  \label{alg:CallAnalysis}
+  \begin{algorithmic}[1]
+    \REQUIRE $S$
+    \ENSURE $CG$: The dynamic enhanced Call Graph
+
+    % 对于动态调用分析得到的每个调用对<callsite, calltarget>
+    \FORALL{$(cs, ct) \in \text{dynamic\_call\_analysis}(binaries)$}
+        \STATE {$caller \gets \text{get\_function}(cs)$}
+        \STATE {$S_{caller} \gets S.pull(caller)$}
+        \STATE {$S_{caller} \gets \text{add\_call\_relation}(S_{caller}, \langle cs, ct \rangle)$}
+        \STATE $S.push(S_{caller})$
+    \ENDFOR
+
+    \STATE {$ACR \gets \{\}$}
+    % 执行对齐
+    \FORALL{$\langle cs, exp_{call} \rangle \in \text{extract\_expression}(binaries)$}
+        \STATE {$cts \gets \text{get\_ct}(S_{caller}, cs)$}
+        \STATE {$\langle exp_{call}, cts \rangle \in ACR$}
+    \ENDFOR
+    \STATE {$CG \gets \text{construct\_callgraph}(ACR)$}
+    \RETURN $CG$
+  \end{algorithmic}
+\end{algorithm}
+
+
+
 
 \subsection{Semantic Analysis Agent Design}
 
