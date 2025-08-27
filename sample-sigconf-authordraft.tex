@@ -505,15 +505,53 @@ To properly handle the complexities of function calls, we have designed the work
   \end{algorithmic}
 \end{algorithm}
 
+% SR是HyBinMAS的核心组件，它的主要输出信息之一是预测出的函数名，这同样也是HyBinMAS的最终输出。考虑到C2的存在，为了提升函数名恢复的效果，SR在分析一个函数时还需要考虑它所调用的函数。为了能够在不同函数之间传递语义信息，我们在设计SR时除了用于预测函数名之外，还需要输出函数的摘要信息，这在许多二进制逆向相关的研究中都被认为是表征函数语义的有效方式。
+
+% 在传统二进制函数名恢复任务的流程中，如何将现有的信息汇总起来并将进行推理一直都由人工负责，这也是二进制逆向任务繁琐困难的原因之一，因为它同样需要一定的领域知识，而且需要考虑如何妥善地利用这些静态信息与动态信息。先前的研究已经展现了LLM在源码级任务、二进制级任务中具有不可忽视的潜力，因此我们在提出HyBinMAS时就将LLM作为核心组件，SR就是其中之一。但是现有的研究的成果（SymGen、XFL）与理想结果仍然存在较大的鸿沟，我们仔细学习与审视了他们的方法，发现它们并没有很好地利用上下文信息，而通常仅仅将目标函数的反编译代码作为推断的依据。在借鉴了现有研究的经验、总结了他们的不足的基础上，我们为SR设计了如下的输入信息：
+
+% 1. 图xxx中由HSDA到SR的黑色箭头表示了反编译代码、调用图、关于待分析文件和函数的元信息等。这些信息是语义理解的基础，我们通过引入调用图来增加函数语义理解的准确度。
+% 2. 从TG到SR的橙色虚线箭头代表了生成的测试样例
+% 3. 从EV到SR的红色箭头则是EV根据TG的测试样例和Executor的执行信息总结得到的反馈信息（具体见xxx）
+% 4. 目标函数所调用的函数的语义信息（函数名和摘要）
+
+% 我们将这些信息按照图xxx所示的方式妥善编排成提示词作为LLM的输入。值得注意的是，SR在首次推测函数名时，它能够利用的信息只有（1）中的静态信息。但在后续的迭代中，HyBinMAS就可以根据Executor、TG和EV的输出，为SR提供必要的动态信息以改进LLM的推测结果。
+
+% 为了妥善处理函数调用的情况，我们在SR中设计了算法xxx所示的工作流算法：
+
+% 我们知道，在不考虑递归的情况下，调用图是一个有向无环图，此时我们可以获得它的反向拓扑序列，而对于递归调用，它必然存在一条回边，我们可以将这样的回边删除，仍然可以得到一个有向无环图，算法xxx中的第2行的topo_sort正是负责这一任务。算法5-11行则描述了使用动态信息增强LLM推理的过程。
 
 
 
 
-\subsection{Test Case Generation Agent Design}
+\subsection{Test Generator Design}
+\label{sec:tg_design}
 
-We reiterate that relying solely on static information for semantic understanding by the SAA is often insufficient, as this approach would effectively regress to those of prior studies (i.e., leveraging LLMs to understand decompiled code). Our key insight is that runtime information accurately reflects a program's execution state, making it an inherent basis for validation. To acquire this runtime information, we need appropriate test cases to trigger the relevant program behaviors. Ideally, such test cases should compensate for the inaccuracies and ambiguities present in static information. While established techniques for test case generation exist, such as fuzzing and symbolic execution, they often lack the ability to intelligently select context-aware inputs. Recent studies have demonstrated the significant potential of LLMs for test case generation. Consequently, BinMAS leverages this capability as the core foundation of the Test Case Generation Agent (TCGA).
+We reiterate that semantic understanding based solely on static information is often insufficient and imprecise. To emulate the process of manual dynamic debugging, it is necessary not only to provide execution support via the Executor but also to construct appropriate test cases that can "trigger" the target function's execution. Within \textbf{HyBinMAS}, this functionality is realized by the Test Generator (TG). However, test case generation is a non-trivial task, particularly because \textbf{HyBinMAS} requires test cases that can intelligently validate the function's anticipated logic. Consequently, we employ a Large Language Model (LLM) as the core of the TG. Nevertheless, the design of the TG should navigate these significant obstacles:
 
-In BinMAS, the prompt template used for generating test cases with an LLM is detailed in Section~xxx. An example of the generated output is also provided.
+\begin{enumerate}
+    \item \textbf{Unlike conventional test case generation, the TG must infer potential parameters and their corresponding types---including primitive types, their derivatives (e.g., pointers), and custom structures---directly from decompiled code, without access to the original source. This significantly complicates the generation process.}
+    \item \textbf{The generated test cases must be concretely applicable to the target function, meaning they must be translated into actually executable code.}
+    \item \textbf{Accurately recovering the full parameter and return value information from stripped binaries is, in the general case, an undecidable problem.}
+\end{enumerate}
+
+To manage these complexities, we decompose the TG into two core components as depicted in Figure~\ref{fig:xxx}: the \textbf{Orchestrator} and the \textbf{Materializer}, responsible for the high-level design and the concrete implementation of the test cases, respectively.
+
+First, the \textbf{Orchestrator} is tasked with designing the test cases.  It receives the target function's semantic information and generates a test plan articulated in natural language, aimed at verifying the logic implied by the SR's semantic description, namely the function summary. The rationale for this separation is twofold: different architectures and instrumentation tools often demand distinct implementation strategies and, thus, different domain knowledge. Entrusting both the design and implementation to a single LLM would dramatically increase the risk of context overflow. To facilitate implementation by the Materializer, the Orchestrator's design must explicitly specify the input values for parameters as well as the expected output values for both parameters and the function's return value. We therefore structure the Orchestrator's output according to the format shown in Figure~\ref{fig:xxx}. Obtaining this information is not straightforward, especially for pointer-type parameters. Therefore, our Orchestrator implementation first uses an LLM for test case generation. To validate  correctness of pointer operations, we then leverage program slicing to extract parameter-related statements from the decompiled code, which a secondary LLM reviews to ensure the integrity of these critical operations within the proposed test plan.
+
+Second, the \textbf{Materializer} component translates the natural language descriptions from the Orchestrator into executable code using specific memory manipulation primitives; this process is effectively a code generation task. To address obstacles (1) and (2), we must furnish the LLM with sufficient domain-specific knowledge. In our reference implementation, for example, we provide the LLM with the relevant memory manipulation APIs from the Frida toolkit (see Appendix for details). Moreover, instead of presupposing the form of the function's arguments, we prompt the LLM to generate a dedicated function (e.g., \texttt{writeArgs}) to marshal the parameters according to the test case's input requirements. For the same reason, the LLM is also instructed to generate a corresponding \texttt{readArgs}-like function to read the output parameters and return them as a string containing explanatory details. The return value is handled similarly. Figure~\ref{fig:xxx} illustrates the materialized implementation corresponding to the design from Figure~\ref{fig:xxx}.
+
+Finally, acknowledging the difficulty posed by challenge (3), we anticipate that a test case initially generated may fail to execute. We therefore establish an iterative improvement between the Executor and the TG: When the Executor fails to run a materialized test case, it reports back essential information via error messages or exceptions, which is then used to refine the implementation in the Materializer. Successfully executed test cases, along with their execution traces, are passed to the EV for analysis. For the same reason, we have incorporated a dynamic execution fallback strategy: if the Materializer's implementation attempts fail more times than a specified threshold, \textbf{HyBinMAS} will abort the execution of that particular test case and pass the error information directly to the EV for analysis.
+
+% 我们再次强调，仅仅根据静态信息来进行语义理解时不准确的，为了模拟人工动态调试的过程，我们除了在Executor部分提供相关的运行支持之外，还需要为其构造合适的测试样例并“触发”目标函数的执行。在HyBinMAS中，我们设计了TG来实现这样的功能。然而，测试样例生成同样不是一个trivial的任务，尤其是HyBinMAS还要求测试样例需要智能地验证目标函数的预期逻辑。所以我们使用LLM作为TG的核心。然而，设计TG时，需要解决如下关键问题：（1）不同于一般的测试样例生成任务，TG需要在不知道源码的情况下分析反编译代码中可能用到的参数及其对应的类型，包括基本类型及其衍生类型、自定义类型或其他更复杂的情况，这无疑增加了测试样例生成的困难性。（2）生成的测试样例必须能够被正确地应用到目标函数上，也就是说它是一段实际可执行的代码。（3）准确恢复stripped binaries中的函数参数与返回值信息是一个不可判定任务。所以我们将TG拆分为图xxx所示的两个核心组件：Orchestrator和Materializer，分别负责测试样例的设计编排与实现
+
+% 首先，我们使用Orchestrator完成测试样例的设计任务，它接收目标函数的语义信息测试目标，生成一种由自然语言编写的测试样例i验证该语义信息所体现的逻辑。这样设计的合理性在于：对于不同的架构和不同工具，我们通常需要不同的实现方式（例如编写不同的测试代码），这意味着不同的领域知识。如果直接将测试样例的设计与实现都交给同一个LLM完成，将极大增加上下文溢出的风险。为了便于Materializer实现测试样例，我们需要在设计时明确地输出参数的输入值、参数与返回值的预期值。所以我们按照了图xxx所示的格式作为Orchestrator的输出。请注意，要想正确地获取这些信息并不是轻而易举的事，尤其是当参数是指针类型时，所以我们在实现Orchestrator时，除了使用一个LLM生成测试样例，我们还利用程序切片技术将反编译代码中与参数相关的语句提取出来，并利用另一个LLM对其中涉及的指针操作进行review，确保测试样例中指针操作的正确性。
+
+% 其次，Materializer组件会根据Orchestrator的自然语言描述，使用特定的内存操作代码实现出来，所以这实际上是一个函数生成任务。为了应对问题（1）与问题（2），我们需要给LLM足够多的领域知识。以本文的实现为例，我们需要提供Frida中内存操作的相关API（详细件附录）。而且我们不能提前假设参数的形式，而是应当提示LLM生成一个函数（例如writeArgs）来修改参数使其满足测试样例的输入要求。另外，处于同样的原因，我们也需要让LLM生成一个形如readArgs的函数来读取参数并以一个包含解释信息的字符串的形式返回（返回值也有相同的要求）。图xxx展示了图xxx所对应的实现结果。
+
+% 最后，我们承认问题（3）的苦难行，单次生成的测试样例很有可能在Executor上执行不起来，所以我们增加了Executor和TG之间的交互：当Executor无法执行TG实现的测试样例时，它会以报错或异常的形式反馈必要的信息并用于Materializer的改进。最终通过的测试样例会与Executor执行成功的信息一同交给EV分析。处于同样的原因，我们还涉及了动态执行的fallback策略：当Materializer实现失败次数超过了指定阈值时，HyBinMAS会放弃执行该测试样例，并直接将错误信息和对应的测试样例交给EV进行分析。
+
+
+
 
 \subsection{Validation Agent Design}
 
