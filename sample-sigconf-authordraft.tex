@@ -353,13 +353,13 @@ The process is initiated by providing HyBinMAS with its inputs: the binary file,
   \caption{HyBinMAS}
   \label{alg:HyBinMAS}
   \begin{algorithmic}[1]
-    \REQUIRE $o$: The Offset of target function, $L$: The so file containing target function, $M$: The maximum iterations, $R$: The maximum retries for execution failure, $K$: The maximum numbers of test cases
-    \ENSURE $N$: The predicted function name
+    \REQUIRE $o$: The Offset of target function, $B$: The binary containing target function, $M$: The maximum iterations, $R$: The maximum retries for execution failure, $K$: The maximum numbers of test cases
+    \ENSURE $l$: The predicted function name
 
     \STATE $\langle A, P, CG, metadata \rangle \gets \text{HSDA}(o, L)$
-    \STATE $\langle N, S \rangle \gets \text{SR}(CG, o, A, P, M, \text{NULL})$
+    \STATE $\langle n, s \rangle \gets \text{SR}(CG, o, A, P, M, \text{NULL})$
     \FOR{$m \gets 1$ \textbf{to} $M$}
-        \STATE $T \gets \text{TG}(N, S, P, K)$
+        \STATE $T \gets \text{TG}(n, s, P, K)$
         \STATE $F \gets []$
         \FORALL{$t \in T$}
             \STATE $\langle err, args, ret, trace \rangle \gets \text{Executor}(t, R)$
@@ -372,11 +372,11 @@ The process is initiated by providing HyBinMAS with its inputs: the binary file,
         \ENDFOR
         \STATE $feedback \gets \text{generate\_feedback}(F)$
         \IF{$\text{consistent\_check}(feedback)$}
-            \RETURN $N$
+            \RETURN $l$
         \ENDIF
-        \STATE $\langle N, S \rangle \gets \text{SR}(CG, o, A, P, metadata, feedback)$
+        \STATE $\langle n, s \rangle \gets \text{SR}(CG, o, A, P, metadata, feedback)$
     \ENDFOR
-    \RETURN $N$
+    \RETURN $l$
   \end{algorithmic}
 \end{algorithm}
 
@@ -399,12 +399,29 @@ As the inaugural component of the \textbf{HyBinMAS} framework, the Hybrid Static
 
 We recognize that such pseudo-C code does not strictly represent the actual execution order. In contrast, assembly code maintains a high degree of fidelity with the sequence of executed instructions. Consequently, we designed the HSDA to also output the assembly code, which is specifically utilized by the downstream Execution Validator (EV). Furthermore, the HSDA is leveraged to extract the function's signature, encompassing the types and storage locations (e.g., registers or stack offsets) of its parameters and return value. This signature information not only provides fundamental support for the Semantic Restorer's (SR) inference process but also serves as a critical prerequisite for generating and executing test cases.
 
-To address Challenge C2, we posit that the function call context is indispensable for semantic understanding. Accordingly, we mandate that the HSDA must also furnish comprehensive call graph information. Notably, the prevalence of indirect calls in C/C++ (as exemplified in Figure~\ref{fig:xxx}) means that relying solely on static analysis is insufficient to guarantee the completeness of the call graph, which can adversely affect the efficacy of name recovery. Our approach resolves this by dynamically capturing inter-procedural call information within the binary and then employing Algorithm~\ref{alg:xxx} to augment the static call graph with this dynamically-obtained data.
+To address Challenge C2, we posit that a comprehensive understanding of function call context is indispensable for semantic analysis. The prevalence of indirect calls in C/C++ (as exemplified in Figure~\ref{fig:indirect_call_example}) renders static analysis alone insufficient for constructing a complete call graph, which in turn impairs the efficacy of name recovery. We therefore begin by defining a formal structure, the \textbf{Attributed Call Graph (ACG)}, denoted as \( \mathcal{G} = (\mathcal{V}, \mathcal{E}) \).
+
+The vertex set, \(\mathcal{V} \subseteq \mathcal{N} \times \mathcal{L} \times \mathcal{S}\), consists of tuples \(v = (n, l, s)\), where \(\mathcal{N}\) is the set of unique function identifiers, \(\mathcal{L}\) is the space of potential function names, and \(\mathcal{S}\) is the space of semantic summaries. The edge set, \(\mathcal{E} = \mathcal{E}_{s} \cup \mathcal{E}_{d}\), represents the union of static and dynamic calls. An edge \(e \in \mathcal{E}\) is a tuple \((n_u, n_v, cs, \text{exp}_{\text{call}})\), where \(n_u\) is the caller, \(n_v\) is the callee, \(cs\) is the call site address, and \(\text{exp}_{\text{call}}\) is the corresponding call expression in the decompiled code.
+
+The process begins with an initial ACG derived from static analysis tools. This initial graph is partially attributed: it contains vertices that are not yet populated with semantic information (names and summaries) and a set of fully attributed static edges, \(\mathcal{E}_s\). The enrichment of vertex attributes is a core responsibility of the SR component, which will be detailed later. To populate the dynamic edge set \(\mathcal{E}_d\), we first capture dynamic call traces as a set of pairs \((cs, ct)\), where \(cs \in \mathcal{CS}\) is a call site and \(ct \in \mathcal{N}\) is its dynamically resolved target. We then formalize the augmentation process with the following definition for \(\mathcal{E}_d\):
+\begin{equation}
+\label{eq:dynamic_augment}
+\mathcal{E}_d = \{ (n_u, ct, cs, \text{exp}_{\text{call}}) \mid \exists n_u \in \mathcal{N} \text{ where } cs \in \text{Sites}(n_u) \land (cs, ct) \text{ is an observed dynamic call} \}
+\end{equation}
+In Equation~\ref{eq:dynamic_augment}, \(\text{Sites}(n_u)\) denotes the set of all call sites within function \(n_u\), and \(\text{exp}_{\text{call}}\) is the decompiled expression aligned with the call site \(cs\).
+
+This augmentation process is visually depicted in Figure~\ref{fig:graph_augmentation}. Initially, the ACG contains only the static call relationships (e.g., between functions A, B, and D). By applying the rule of Equation~\ref{eq:dynamic_augment}, we enrich the graph with the newly discovered dynamic call edges, represented by the dashed blue arrows.
 
 
 % 作为HyBinMAS的开端，HSDA接受一个待分析的函数（例如例如libnative-lib.so[+0x1234]）及其所在的二进制作为初始输入，进行动静态混合分析。由于HSDA是HyBinMAS框架的基础服务之一，其输出信息是其余环节的重要依据。现有的研究（SymGen）表明，相较于反汇编代码，反编译代码对函数语义理解的贡献度更大，所以我们也将反编译代码作为HSDA模块的一个重要输出供后续使用。在此基础上，HyBinMAS还做了如下突破：
 
-% 我们洞察到这样的伪C代码不能严格代表实际的执行顺序。相反，反汇编代码可以与实际执行的指令具有高度地对齐性。偶一我们在设计HSDA时也将反汇编代码作为另一个输出成分以供后续EV使用。我们还利用HSDA获取了函数的签名信息，包括参数与返回值的类型、存储位置等。这些信息除了为后续SR推理函数名提供基本的支持，还将作为生成与执行测试样例的重要依据。为了解决C2，我们指出在进行语义理解时应当考虑函数调用情况，所以我们在设计HSDA时也要求提供同样的调用信息。值得注意的是，由于C/C++中广泛存在间接调用的使用（例如图xxx），仅考虑静态调用信息将难以保证调用链的完整性，进而影响函数名恢复的效果。我们选择动态抓取了同一二进制文件内不同函数之间的调用信息，并使用算法xxx利用动态调用信息增强静态调用信息。
+% 我们洞察到这样的伪C代码不能严格代表实际的执行顺序。相反，反汇编代码可以与实际执行的指令具有高度地对齐性。偶一我们在设计HSDA时也将反汇编代码作为另一个输出成分以供后续EV使用。我们还利用HSDA获取了函数的签名信息，包括参数与返回值的类型、存储位置等。这些信息除了为后续SR推理函数名提供基本的支持，还将作为生成与执行测试样例的重要依据。
+
+% 为了解决C2，我们指出在进行语义理解时应当考虑函数调用情况，而且由于C/C++中广泛存在间接调用的使用（例如图xxx），仅考虑静态调用信息将难以保证调用链的完整性，进而影响函数名恢复的效果。所以我们首先定义了带属性的调用图ACG = <AN, AE>，其中节点集AN = N * L * S的每个元素是一个<n, l, s>三元组，分别表示当前节点的标识符、SR预测的函数名和摘要。而边集AE= AE_d + AE_s = N * N * CS * EXP代表了函数之间存在的静态调用和静态调用关系（均由调用者指向被调用者），由<n_u, n_v, cs, exp_{call}>表示这条边所对应的调用点以及该调用点在反编译代码中对应的调用表达式。
+
+% 其次使用静态分析工具可以获得初始的ACG，它由不携带属性的节点信息和包含属性的静态调用边信息组成，节点的属性信息的补充将会在SR部分详细交待。而对于动态调用边信息，我们首先获得<cs, ct> \in CS * N的调用信息，并定义了公式xxx完成动态增强的过程：
+$AE_d = \{ \langle n_u, ct, cs, exp_{call} \rangle | \forall n_u \text{ contianing cs}, ct, cs, exp_{call} \text{ is calling expression aligned with cs} \}$
+% 图xxx的蓝色箭头也描述了动态增强的过程，在没有使用动态增强之前，ACG中只有A、B、D之间存在静态调用关系，利用公式xxx，我们在图中用虚线箭头补充了动态调用的关系。
 
 
 \begin{algorithm}
@@ -474,17 +491,26 @@ In the workflow of traditional binary function name recovery, the aggregation an
 
 We meticulously orchestrate this multifaceted information into a structured prompt, as depicted in Figure~\ref{fig:xxx}, to serve as the input for the LLM. It is important to note that during its initial inference pass, the SR can only utilize the static information from item (1). However, in subsequent iterations, \textbf{HyBinMAS} enriches the SR's context with dynamic information derived from the Executor, TG, and EV, enabling the LLM to progressively refine its predictions.
 
-To properly handle the complexities of function calls, we have designed the workflow algorithm for the SR as detailed in Algorithm~\ref{alg:sr_workflow}. We recognize that, excluding recursion, a call graph is a Directed Acyclic Graph (DAG), from which a reverse topological order can be derived. In cases involving recursion, which manifest as back edges in the graph, we can temporarily remove these edges to once again obtain a DAG. The \texttt{topo\_sort} function on Line 2 of Algorithm~\ref{alg:sr_workflow} is responsible for this task. Finally, Lines 5-11 of the algorithm describe the process of enhancing the LLM's reasoning process with the collected dynamic information.
+Building upon the Attributed Call Graph (ACG) obtained from the HSDA, we abstract the core operation of the Semantic Restorer (SR) as a state transition function. This function describes how applying the SR to a specific node \(n\) in the current graph \(\mathcal{G}\) results in a new graph state, \(\mathcal{G}'\):
+\begin{equation}
+\label{eq:sr_transition}
+\mathcal{G}' = \text{SR}(n, \mathcal{G})
+\end{equation}
+The effect of this transformation is to produce an updated graph, \(\mathcal{G}'\), where the attributes of the vertex \(n\) have been newly populated. The difference between the graphs can be expressed as the augmentation of \(n\) with a predicted name \(l\) and summary \(s\). This process, where the SR enriches a node with semantic information, is visually depicted by the orange arrow in Figure~\ref{fig:xxx}.
+
+A critical prerequisite for applying this transition function is to process the graph's nodes in a bottom-up, reverse topological order. To facilitate this, we first operate on the **transpose** of the ACG. This operation, as illustrated by the green arrows in Figure~\ref{fig:xxx}, involves reversing the direction of every edge in the graph. The resulting structure, denoted as \(\mathcal{G}^T\), ensures that when we traverse the nodes, a function's callees are typically analyzed before the function itself, allowing semantic information to propagate upwards through the call hierarchy.
+
+We have also designed the workflow algorithm for the SR as detailed in Algorithm~\ref{alg:sr_workflow}. We recognize that, excluding recursion, a call graph is a Directed Acyclic Graph (DAG), from which a reverse topological order can be derived. In cases involving recursion, which manifest as back edges in the graph, we can temporarily remove these edges to once again obtain a DAG. The \texttt{topo\_sort} function on Line 2 of Algorithm~\ref{alg:sr_workflow} is responsible for this task. Finally, Lines 5-11 of the algorithm describe the process of enhancing the LLM's reasoning process with the collected dynamic information.
 
 \begin{algorithm}
   \caption{Workflow Algorithm for SR}
   \label{alg:sr_workflow}
   \begin{algorithmic}[1]
-    \REQUIRE $CG$: The Call Graph from HSDA, $o$: The offset of target function, $cases$ The test cases from TG, $feedback$: The feedback from EV
-    \ENSURE $N$: The predicted function name
+    \REQUIRE $ACG$: The Attributed Call Graph from HSDA, $o$: The offset of target function, $cases$ The test cases from TG, $feedback$: The feedback from EV
+    \ENSURE $l$: The predicted function name
 
-    \STATE {$DCG \gets \texttt{GetDCG}(CG, o)$}
-    \STATE {$W \gets \texttt{ReverseTopoSort}(DCG)$}
+    \STATE {$DACG \gets \texttt{GetDominatedACG}(ACG, o)$}
+    \STATE {$W \gets \texttt{ReverseTopoSort}(DACG)$}
 
     \STATE {$NC \gets \varnothing$}
     \WHILE{$W \ne \varnothing $}
@@ -501,7 +527,7 @@ To properly handle the complexities of function calls, we have designed the work
         \STATE {$N \gets \texttt{QueryLLM}(w, cases, feedback)$}
     \ENDIF
 
-    \RETURN $N$
+    \RETURN $l$
   \end{algorithmic}
 \end{algorithm}
 
@@ -517,6 +543,9 @@ To properly handle the complexities of function calls, we have designed the work
 % 我们将这些信息按照图xxx所示的方式妥善编排成提示词作为LLM的输入。值得注意的是，SR在首次推测函数名时，它能够利用的信息只有（1）中的静态信息。但在后续的迭代中，HyBinMAS就可以根据Executor、TG和EV的输出，为SR提供必要的动态信息以改进LLM的推测结果。
 
 % 为了妥善处理函数调用的情况，我们在SR中设计了算法xxx所示的工作流算法：
+
+% 我们在HSDA获得的ACG的基础上，将SR抽象为公式xxx所示的状态转移方程，它表示对于当前状态的ACG，且指针位于节点n处，经过SR之后ACG的状态变为ACG^\prime，其中ACG^\prime - ACG = <n, l, s>，也即SR对节点n所代表的函数名和摘要信息进行了补充。图xxx的橙色箭头形象地描述了这一过程。值得注意的是，在应用转移方程SR之前还将ACG中所有的边按照绿色箭头所示进行了逆向操作
+$$ACG^\prime = SR(n,ACG)$$
 
 % 我们知道，在不考虑递归的情况下，调用图是一个有向无环图，此时我们可以获得它的反向拓扑序列，而对于递归调用，它必然存在一条回边，我们可以将这样的回边删除，仍然可以得到一个有向无环图，算法xxx中的第2行的topo_sort正是负责这一任务。算法5-11行则描述了使用动态信息增强LLM推理的过程。
 
