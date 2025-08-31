@@ -592,7 +592,25 @@ Evidently, the outcome of the VA's validation critically influences the number o
 
 \section{Implementation and Evaluation}
 
+\subsection{Implementation and Setup}
+
+Our implementation leverages \textbf{Ghidra v11.3.2} to procure static information, including disassembly, decompiled pseudo-code, the static call graph, and function signatures. For the acquisition of dynamic call information, we employ \textbf{Simpleperf}. Specifically, we sample execution at a frequency of 1000\,Hz and, to ensure uniform processing, record only the offsets of call sites rather than their symbolic names. The raw output from Simpleperf is a call stack, which we process by identifying contiguous sequences of frames belonging to the same binary module to derive \((cs, ct)\) pairs. We emphasize that while dynamic instrumentation tools like Frida could achieve the same outcome, our empirical evaluation revealed that Frida's instrumentation overhead introduced prohibitive application startup latencies, often causing the target process to hang or be terminated by the operating system.
+
+The implementation of Executor is centered on \texttt{Frida}. We utilize its \texttt{Stalker} engine to trace instruction sequences and thereby capture execution information. Frida's hooking capabilities are instrumental for intercepting the target function, while its comprehensive API provides the necessary primitives for reading and writing register and memory state, as required by TG. A critical design choice is our use of an indirect triggering mechanism. Rather than invoking the target function directly---a precarious approach given that parameters can be exceedingly complex and involve pointer values that are impossible to synthesize correctly, leading to inevitable crashes---we instead hook the function and intercept it during a live execution. This strategy ensures that when our analysis begins, the function's parameters have already been populated with valid values by the program's natural control flow.
+
+Our experiments were conducted on a server running Ubuntu 20.04, with the target device being an ARM-based machine running Android 15. For the control parameters used in Algorithm~\ref{alg:HyBinMAS}, we set the maximum iterations $M$ to 3, the maximum retries $R$ to 3, and the maximum number of test cases $K$ to 3.
+
+\subsection{Baselines}
+
+Within the domain of function name recovery, we select \textbf{SymGen} as our primary baseline, as it represents the current state-of-the-art (SOTA). We acknowledge that \textbf{FoC} is another recent SOTA method; however, its focus is exclusively on cryptographic functions, placing it outside the scope of our general-purpose evaluation. Additionally, considering the formidable capabilities demonstrated by general-purpose Large Language Models (LLMs) across a wide range of tasks, we also include \textbf{Deepseek} as a baseline. Prior to \textbf{SymGen}, research in this area predominantly framed function name recovery as a classification task. Therefore, we have selected \textbf{XFL} from this line of traditional research to serve as a representative method in our set of baselines.
+
 \subsection{Dataset}
+
+\subsubsection{General-Purpose Dataset}
+
+Many studies in function name recovery utilize projects from the GNU ecosystem to construct dataset. For instance, \textbf{SymGen} manually compiled 33 GNU projects to construct their evaluation dataset. To ensure a fair and direct comparison with our baselines, we replicated the dataset construction methodology proposed by  \textbf{SymGen}. It is important to note that the original \textbf{SymGen} dataset is extensive, comprising a vast number of functions from both executable files and shared libraries. Constrained by the token consumption of the \textbf{HyBinMAS} framework, and to establish a level playing field with the dataset we introduce later, we elected to extract only the shared library files from their collection for RQ1. Furthermore, the original dataset provided by \textbf{SymGen} contains only decompiled code and lacks other artifacts required by \textbf{HyBinMAS} (such as assembly code and call graphs). We therefore processed the binaries to supplement this dataset with the necessary additional information. The statistical details of the resulting dataset are presented in Figure~\ref{fig:symgen_dataset_stats}.
+
+\subsubsection{ARM64 Dataset}
 \begin{figure}[h] % [h] 表示图片放置在当前位置
     \centering
     \includegraphics[width=0.5\textwidth]{image/ConstructDataset.drawio.png} % 调整图片宽度为文本宽度的50%
