@@ -667,7 +667,24 @@ Ultimately, we get xxx Android projects for our dataset. Detailed information fo
 
 
 \section{Threats to Validity}
+\textbf{Binary Code Obfuscation}. The HyBinMAS framework is designed to operate on non-obfuscated binary code. In real-world scenarios, particularly with closed-source software, code obfuscation is a prevalent technique for protecting intellectual property. The presence of such obfuscation could potentially limit the practical utility of HyBinMAS for function name recovery in real-world binaries. However, to ensure a fair comparison and maintain a level playing field with the selected baselines, we have excluded obfuscated code from the scope of this study.
 
+\textbf{Triggering of Binary Functions}.HyBinMAS employs an interception strategy that activates after a target function has been executed. Consequently, the ability to trigger these functions significantly impacts the completeness of the dynamic information that can be collected, which in turn affects the overall recovery performance. In our experiments, we utilized monkey testing to trigger a wide range of functions. Nevertheless, it is inevitable that some functions that are difficult to reach via random inputs may have been missed. We must emphasize, however, that the specific method for triggering functions is not the central contribution of this work. Our results demonstrate that even with a straightforward approach like monkey testing, HyBinMAS achieves substantial efficacy. The framework is modular, allowing for the substitution of more sophisticated triggering mechanisms, such as fuzzing, which could potentially yield even better results.
+
+\textbf{Data Scale and Diversity}. For RQ2, our dataset comprised over 3,000 functions from six distinct applications. While this scale was sufficient to draw conclusive findings, a more comprehensive evaluation of HyBinMAS's effectiveness would ideally involve a larger and more diverse dataset. We contend, however, that expanding the scale and diversity of such a dataset is a significant challenge. During our data collection process, we discovered that a relatively small proportion of open-source Android applications utilize native code, which resulted in many potential projects being excluded from our final dataset. We leave the curation of a more extensive dataset as an avenue for subsequent research.
+
+\textbf{Selection of LLM}. In our current experimental setup, we selected the Deepseek-R1 model as the foundational LLM for our method. Given the rapidly evolving landscape of Large Language Models, other state-of-the-art models, including those from the GPT series, could certainly be integrated into our framework. However, due to practical constraints such as token limits and API costs, we have only conducted systematic experiments with Deepseek-R1. A thorough investigation of the impact of different LLMs on performance is therefore designated as an area for future work.
+
+
+% ## Threats to Validity
+
+% 二进制代码混淆。HyBinMAS框架针对的目标是未经混淆处理的二进制代码。在实际场景（尤其是闭源二进制）中，代码混淆是一种常见的保护知识产权的方法，代码混淆的存在可能影响HyBinMAS在真实二进制代码中函数名称恢复的实用性，但是为了与Baselines在同一起跑线，在本文中我们也不考虑代码混淆。
+
+% 触发二进制函数。HyBinMAS选择在目标函数被执行后进行拦截的方式，所以目标函数是否触发很大程度上影响着HyBinMAS的动态信息获取的完整程度，进而影响整体的恢复效果。在实验中我们通过monkey触发了尽可能多的函数，但是也不可避免地遗漏部分难以触发的函数。但我们强调如何触发函数并不是本文工作的重点，我们在使用monkey的情况下已经能够实现足够好的效果，基于Fuzz或其他更有效的触发方式完全可以替换本文的实现从而实现更好的效果。
+
+% 数据规模与多样性。我们在RQ2中使用了6个APP、3000+的函数，虽然已经能够得出确定性的结论，但为了更全面地衡量HyBinMAS的有效性，最好使用更大规模且更多样的数据集。然而，我们强调扩充数据集规模和多样性是十分有挑战性的：我们在实际收集数据集时发现开源APP中使用native代码的仓库占比较少，导致我们收集的许多APP项目并没有出现在最终的数据集中。我们将这部分的工作留给后续的研究。
+
+% LLM的选择。在我们当前的实验中选择了Deepseek-R1模型作为方法的基础，考虑到LLM领域喷涌的发展趋势，使用包括GPT等在内的LLM同样也可以被用于本文的实验中。但是由于token的限制，我们目前只针对Deepseek-R1进行了系统的实验，我们将这部分的工作留给未来的研究。
 
 
 
