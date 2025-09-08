@@ -871,7 +871,7 @@ To objectively evaluate the applicability of our tool across multiple architectu
 
 
 \subsubsection{Baseline benchmark}
-Many studies in function name recovery utilize projects from the GNU ecosystem to construct dataset. For instance, SymGen\cite{SymGen} manually compiled 33 GNU\cite{GNU} projects to construct their evaluation dataset. To ensure a fair and direct comparison with our baselines, we replicated the dataset construction methodology proposed by SymGen. It is important to note that the original SymGen dataset is extensive, comprising a vast number of functions from both executable files and shared libraries. Constrained by the token consumption of the \textbf{HyBinMAS} framework, and to establish a level playing field with the dataset we introduce later, we elected to extract only the shared library files from their collection for RQ1. Furthermore, the original dataset provided by \textbf{SymGen} contains only decompiled code and lacks other artifacts required by \textbf{HyBinMAS} (such as assembly code and call graphs). We therefore processed the binaries to supplement this dataset with the necessary additional information. %The statistical details of the resulting dataset are presented in Figure~\ref{fig:symgen_dataset_stats}.
+Many studies in function name recovery utilize projects from the GNU ecosystem to construct dataset. For instance, SymGen\cite{SymGen} manually compiled 33 GNU projects to construct their evaluation dataset. To ensure a fair and direct comparison with our baselines, we replicated the dataset construction methodology proposed by SymGen. It is important to note that the original SymGen dataset is extensive, comprising a vast number of functions from both executable files and shared libraries. Constrained by the token consumption of the \textbf{HyBinMAS} framework, and to establish a level playing field with the dataset we introduce later, we elected to extract only the shared library files from their collection for RQ1. Furthermore, the original dataset provided by SymGen contains only decompiled code and lacks other artifacts required by \textbf{HyBinMAS} (such as assembly code and call graphs). We therefore processed the binaries to supplement this dataset with the necessary additional information. %The statistical details of the resulting dataset are presented in Figure~\ref{fig:symgen_dataset_stats}.
 
 
 
@@ -938,7 +938,7 @@ Within the domain of function name recovery, we select SymGen\cite{SymGen} as ou
 
 
 \subsection{Evaluation Metrics}
-Consistent with prior works\textbf{[TODO]}, we choose to use metrics based on precision, recall, and F1-score to evaluate the effectiveness of different methods. For a given predicted function name $S_l = \{w_1, w_2, ..., w_m\}$ and its corresponding gold one $\hat{S}_l = \{\hat{w}_1, \hat{w}_2, ..., \hat{w}_n\}$. we first compute TP, FP, and FN through set operations, and then calculate precision, recall, and F1-score based on these values:
+Consistent with prior works\cite{NFRE, NERO, SimLLM, SymGen}, we choose to use metrics based on precision, recall, and F1-score to evaluate the effectiveness of different methods. For a given predicted function name $S_l = \{w_1, w_2, ..., w_m\}$ and its corresponding gold one $\hat{S}_l = \{\hat{w}_1, \hat{w}_2, ..., \hat{w}_n\}$. we first compute TP, FP, and FN through set operations, and then calculate precision, recall, and F1-score based on these values:
 % 和之前的工作一致，我们选择使用基于准确率、召回率和F1分数的指标衡量不同方法的有效性。对于给定的参考函数名\hat{S}_l = {\hat{w}_1, \hat{w}_2, ..., \hat{w}_n}和方法预测的函数名S_l = {w_1, w_2, ..., w_m}，我们首先通过集合运算计算出TP、FP和FN，之后在此基础上计算出准确率、召回率和F1分数：
 $$
 TP = |\hat{S}_l \cap S_l|, \ FP = |\hat{S}_l \setminus S_l|, \ FN = |S_l| - TP
@@ -947,7 +947,7 @@ $$
 \text{Precision} = \frac{TP}{TP + FP}, \text{Recall} = \frac{TP}{TP + FN}, F_{1} = \frac{2 \times \text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}}
 $$
 % 同SymGen和SymLM一样，我们使用CodeWordNet来处理语义相似的单词。
-Similar to SymGen and SymLM, we use CodeWordNet to handle semantically similar words.
+Similar to SymGen\cite{SymGen} and SymLM\cite{SymLM}, we use CodeWordNet to handle semantically similar words.
 
 
 \subsection{Experimental Setup}
