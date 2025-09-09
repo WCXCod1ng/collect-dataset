@@ -120,6 +120,7 @@
 \renewcommand{\algorithmicensure}{\textbf{Output:}}
 \usepackage{xcolor}
 \usepackage{multirow}
+\usepackage{xcolor}
 
 \lstset{
     basicstyle=\ttfamily\small,
@@ -342,8 +343,8 @@ The presence of heterogeneous and dynamic function invocation patterns is a perv
 
 \begin{figure}[h] % [h] 表示图片放置在当前位置
     \centering
-    \includegraphics[width=0.8\textwidth]{img/invocation_example.drawio.png} % 调整图片宽度为文本宽度的50%
-    \caption{Overview of xxx } % 添加图片标题
+    \includegraphics[width=1.0\textwidth]{img/invocation_example.drawio.png} % 调整图片宽度为文本宽度的50%
+    \caption{An example of dynamic function invocation} % 添加图片标题
     \label{fig:invocation_example} % 设置图片标签，方便引用
 \end{figure}
 
@@ -351,52 +352,52 @@ A more profound challenge stems from the prevalence of indirect and dynamic invo
 
 Taking SymGen\cite{SymGen} as an example, we observed that many of its predicted names were placeholders like \lstinline{FUN_xxxxxx}. A closer analysis revealed that this often occurs when the primary logic of a target function A is implemented by calling another function B. Because B's name has been stripped and replaced with a placeholder, the predicted name for A inherits this placeholder. While some methods like SymLM\cite{SymLM} and NERO\cite{NERO} have attempted to model call context information, their performance has been suboptimal. We argue that this is primarily because they fail to account for the topological dependency in the call graph; that is, the logic of copynode234 can be accurately inferred only after the logic of copyfn has been determined.
 
-\begin{minipage}[t]{0.45\textwidth}
-\centering
-% \renewcommand{\baselinestretch}{1.25}
-\begin{lstlisting}[caption={copynode234}, basicstyle=\ttfamily\scriptsize,
-keywordstyle=\color{magenta}\bfseries\scriptsize,
-commentstyle=\color{Green}\itshape\scriptsize]
-static node234 *copynode234(
-    node234 *n, copyfn234 copyfn,
-    void *copyfnstate) {
-  for (i = 0; i < 3; i++) {
-    if (n->elems[i] && copyfn)
-      n2->elems[i] = copyfn(copyfnstate, n->elems[i]);
-  }
-  for (i = 0; i < 4; i++) {
-    if (n->kids[i]) {
-      n2->kids[i] = copynode234(n->kids[i], copyfn, copyfnstate);
-      n2->kids[i]->parent = n2;
-    } else n2->kids[i] = NULL;
-    n2->counts[i] = n->counts[i];
-  }
-  return n2;
-}
-\end{lstlisting}
-\end{minipage}
-\vspace{0.3em}
-\hfill
-\begin{minipage}[t]{0.45\textwidth}
-\centering
-% \renewcommand{\baselinestretch}{1.25}
-\begin{lstlisting}[caption={Pseudocode of copynode234}, basicstyle=\ttfamily\scriptsize,
-keywordstyle=\color{magenta}\bfseries\scriptsize,
-commentstyle=\color{teal}\itshape\scriptsize]
-long FUN_00125a60(long param_1,
-    code *param_2,
-    undefined8 param_3){
-  lVar3 = *(long *)(param_1 + 0x38);
-  if ((param_2 != (code *)0x0) && (lVar3 != 0)) {
-    lVar3 = (*param_2)(param_3);
-  }
-  *(long *)(lVar1 + 0x38) = lVar3;
-  // other operations
-}
-\end{lstlisting}
-\end{minipage}
-% \renewcommand{\baselinestretch}{1.0}
-\vspace{0.1em}
+% \begin{minipage}[t]{0.45\textwidth}
+% \centering
+% % \renewcommand{\baselinestretch}{1.25}
+% \begin{lstlisting}[caption={copynode234}, basicstyle=\ttfamily\scriptsize,
+% keywordstyle=\color{magenta}\bfseries\scriptsize,
+% commentstyle=\color{Green}\itshape\scriptsize]
+% static node234 *copynode234(
+%     node234 *n, copyfn234 copyfn,
+%     void *copyfnstate) {
+%   for (i = 0; i < 3; i++) {
+%     if (n->elems[i] && copyfn)
+%       n2->elems[i] = copyfn(copyfnstate, n->elems[i]);
+%   }
+%   for (i = 0; i < 4; i++) {
+%     if (n->kids[i]) {
+%       n2->kids[i] = copynode234(n->kids[i], copyfn, copyfnstate);
+%       n2->kids[i]->parent = n2;
+%     } else n2->kids[i] = NULL;
+%     n2->counts[i] = n->counts[i];
+%   }
+%   return n2;
+% }
+% \end{lstlisting}
+% \end{minipage}
+% \vspace{0.3em}
+% \hfill
+% \begin{minipage}[t]{0.45\textwidth}
+% \centering
+% % \renewcommand{\baselinestretch}{1.25}
+% \begin{lstlisting}[caption={Pseudocode of copynode234}, basicstyle=\ttfamily\scriptsize,
+% keywordstyle=\color{magenta}\bfseries\scriptsize,
+% commentstyle=\color{teal}\itshape\scriptsize]
+% long FUN_00125a60(long param_1,
+%     code *param_2,
+%     undefined8 param_3){
+%   lVar3 = *(long *)(param_1 + 0x38);
+%   if ((param_2 != (code *)0x0) && (lVar3 != 0)) {
+%     lVar3 = (*param_2)(param_3);
+%   }
+%   *(long *)(lVar1 + 0x38) = lVar3;
+%   // other operations
+% }
+% \end{lstlisting}
+% \end{minipage}
+% % \renewcommand{\baselinestretch}{1.0}
+% \vspace{0.1em}
 
 \textbf{Challenge 3: Unpredictable Run-time Behavior.}
 We contend that static code analysis alone is insufficient for a complete understanding of program logic, especially when the code involves dynamic behaviors influenced by runtime parameters or external environment variables. This holds true even for source-level code comprehension, although the rich semantic information available in source code often mitigates its impact. In the context of stripped binaries, the effect of dynamic behavior becomes far more pronounced. This challenge is further exacerbated by modern compilers, which extensively employ optimization techniques that obscure the code's true behavior, making it exceedingly difficult to grasp its logic from a static view\cite{sig_meet_opt}.
@@ -405,61 +406,61 @@ Consider a function \lstinline{ParseNanos} from a real-world project (RTranslato
 
 \begin{figure}[h] % [h] 表示图片放置在当前位置
     \centering
-    \includegraphics[width=0.8\textwidth]{img/dynamic_example.drawio.png} % 调整图片宽度为文本宽度的50%
-    \caption{Overview of xxx } % 添加图片标题
+    \includegraphics[width=1.0\textwidth]{img/dynamic_example.drawio.png} % 调整图片宽度为文本宽度的50%
+    \caption{A example of contribution of dynamic execution} % 添加图片标题
     \label{fig:dynamic_example} % 设置图片标签，方便引用
 \end{figure}
 
-\begin{minipage}[t]{0.45\textwidth}
-%\noindent
-\begin{lstlisting}[caption={ParseNanos},
-basicstyle=\ttfamily\scriptsize,
-keywordstyle=\color{magenta}\bfseries\scriptsize,
-commentstyle=\color{teal}\itshape\scriptsize]
-const char* ParseNanos(const char* data, int32* nanos) {
-  if (!ascii_isdigit(*data)) return nullptr;
-  int value = 0, len = 0;
-  while (ascii_isdigit(*data)) {
-    if (len < 9) value = value * 10 + *data - '0';
-    ++len;
-    ++data;
-  }
-  while (len < 9) {
-    value = value * 10;
-    ++len;
-  }
-  *nanos = value;
-  return data;
-}
-\end{lstlisting}
-\end{minipage}
-\hfill
-\begin{minipage}[t]{0.45\textwidth}
-\begin{lstlisting}[caption={Decompiled counterpart of ParseNanos},
-basicstyle=\ttfamily\scriptsize,
-keywordstyle=\color{magenta}\bfseries\scriptsize,
-commentstyle=\color{teal}\itshape\scriptsize]
-byte * FUN_001127bc(byte *param_1,int *param_2){
-  if (9 < *param_1 - 0x30) {
-    return (byte *)0x0;
-  }
-  do {
-    uVar3 = uVar4;
-    iVar7 = uVar6 + iVar11 * 10;
-    param_1 = param_1 + 1;
-    uVar6 = (uint)*param_1;
-    uVar4 = uVar3 + 1;
-    iVar7 = iVar7 + -0x30;
-    if (8 < uVar3) {
-      iVar7 = iVar11;
-    }
-    uVar5 = uVar5 - 1;
-    iVar11 = iVar7;
-  } while (uVar6 - 0x30 < 10);
-  // other operations
-}
-\end{lstlisting}
-\end{minipage}
+% \begin{minipage}[t]{0.45\textwidth}
+% %\noindent
+% \begin{lstlisting}[caption={ParseNanos},
+% basicstyle=\ttfamily\scriptsize,
+% keywordstyle=\color{magenta}\bfseries\scriptsize,
+% commentstyle=\color{teal}\itshape\scriptsize]
+% const char* ParseNanos(const char* data, int32* nanos) {
+%   if (!ascii_isdigit(*data)) return nullptr;
+%   int value = 0, len = 0;
+%   while (ascii_isdigit(*data)) {
+%     if (len < 9) value = value * 10 + *data - '0';
+%     ++len;
+%     ++data;
+%   }
+%   while (len < 9) {
+%     value = value * 10;
+%     ++len;
+%   }
+%   *nanos = value;
+%   return data;
+% }
+% \end{lstlisting}
+% \end{minipage}
+% \hfill
+% \begin{minipage}[t]{0.45\textwidth}
+% \begin{lstlisting}[caption={Decompiled counterpart of ParseNanos},
+% basicstyle=\ttfamily\scriptsize,
+% keywordstyle=\color{magenta}\bfseries\scriptsize,
+% commentstyle=\color{teal}\itshape\scriptsize]
+% byte * FUN_001127bc(byte *param_1,int *param_2){
+%   if (9 < *param_1 - 0x30) {
+%     return (byte *)0x0;
+%   }
+%   do {
+%     uVar3 = uVar4;
+%     iVar7 = uVar6 + iVar11 * 10;
+%     param_1 = param_1 + 1;
+%     uVar6 = (uint)*param_1;
+%     uVar4 = uVar3 + 1;
+%     iVar7 = iVar7 + -0x30;
+%     if (8 < uVar3) {
+%       iVar7 = iVar11;
+%     }
+%     uVar5 = uVar5 - 1;
+%     iVar11 = iVar7;
+%   } while (uVar6 - 0x30 < 10);
+%   // other operations
+% }
+% \end{lstlisting}
+% \end{minipage}
 
 % % ### Challenges
 
@@ -496,16 +497,31 @@ patterns & sub-pattern &xx dynaic &xx static & xfl &symGen    \\
 
 \subsection{Key Insights}
 
-Our approach, HyBinMAS, is motivated by the need to overcome the limitations of current LLM-based methods in handling challenges such as fast-evolving codebases, OOV symbols, dynamic features and  unpredictable run-time behaviors. By leveraging a multi-agent, feedback-driven framework that integrates both static and dynamic analysis, we aim to provide a more flexible, accurate, and future-proof solution for code recovery tasks. %In recent years, LLMs have demonstrated remarkable efficacy across numerous source-level programming tasks. Pioneering research such as SymGen and FoC has illuminated their potential for understanding the semantics of binary code. We are therefore convinced that leveraging capacities of LLMs remains a promising strategy.
+Our approach, HyBinMAS, is motivated by the need to overcome the limitations of current LLM-based methods in handling challenges such as fast-evolving codebases, OOV symbols, dynamic features and unpredictable run-time behaviors. By leveraging a multi-agent, feedback-driven framework that integrates both static and dynamic analysis, we aim to provide a more flexible, accurate, and future-proof solution for code recovery tasks. %In recent years, LLMs have demonstrated remarkable efficacy across numerous source-level programming tasks. Pioneering research such as SymGen and FoC has illuminated their potential for understanding the semantics of binary code. We are therefore convinced that leveraging capacities of LLMs remains a promising strategy.
 Specifically, HyBinMAS considers three key insights as follows:
 
 To address \textbf{Challenge 1}, instead of fine-tuning small models like CodeLlama, HyBinMAS utilizes a general-purpose LLM as its foundational component, structured within a Multi-Agent System. It eliminates the need for meticulous fine-tuning, thereby attaining superior generalizability, considering the inherent drawbacks of fine-tuning large-scale LLMs, which is both resource-intensive and time-consuming\cite{LLaMA}.
 
 To tackle \textbf{Challenge 2}, HyBinMAS employs a hybrid static-dynamic analysis to resolve function call graphs, which will be detailed in Section~\ref{sec:hsda_design}. Activation of this call relationship is explicitly considered during the name prediction phase. We observed that reverse engineers often adopt a recursive mindset when analyzing function calls: if function A calls function B, they typically analyze B first and use the resulting semantic understanding to inform their analysis of A. Inspired by this practice, HyBinMAS follows a similar bottom-up process. It first recovers the names of the functions called within a target function and then leverages this information to recover the name of the target function itself. Returning to the example in Figure~\ref{fig:invocation_example}, by analyzing the call relationships of \lstinline{FUN_00125a60}, we can determine the actual function pointed to by \lstinline{param_2}, deduce that its logic is related to copying, and consequently predict a more accurate name, as shown in Figure~\ref{fig:invocation_example} (b). Without this strategy, one might only discern that the function performs a recursive traversal, without knowing the specific operation being performed during the traversal.
 
-For \textbf{Challenge 3}, HyBinMAS first seeks to emulate the human thought process as an experienced reverse engineer not only "reads" the code but also "runs" it. After forming an initial hypothesis about the code's semantics through static inspection, they will construct test cases to execute the function and observe its dynamic behavior. This allows them to validate or refute their initial assumptions and guide further analysis. We believe this is a highly effective method for addressing the challenge. For the function \lstinline{ParseNanos}, the initial LLM predictions in Table~\ref{tab:dynamic_example} were semantically close but incorrect regarding the precise number of digits, which is a fitting example of being misled by compilation optimizations. Based on the initial semantic hypothesis, HyBinMAS generates the test cases shown in "HyBinMAS-S" column of Table~\ref{tab:dynamic_example}. Upon execution, it observes that for test case 4, which expects only the first 8 characters to be parsed, all 9 digits are actually processed. This execution trace is summarized into a feedback report that directs the LLM to revise its previous inference. Through several iterations of this process, HyBinMAS arrives at the more accurate semantic prediction shown in the "HyBinMAS" column of Table~\ref{tab:dynamic_example}.
+For \textbf{Challenge 3}, HyBinMAS first seeks to emulate the human thought process as an experienced reverse engineer not only "reads" the code but also "runs" it. After forming an initial hypothesis about the code's semantics through static inspection, they will construct test cases to execute the function and observe its dynamic behavior. This allows them to validate or refute their initial assumptions and guide further analysis. We believe this is a highly effective method for addressing the challenge. For the function \lstinline{ParseNanos}, the initial LLM predictions in Table~\ref{tab:dynamic_example} were semantically close but incorrect regarding the precise number of digits, which is a fitting example of being misled by compilation optimizations. Based on the initial semantic hypothesis, HyBinMAS generates partial test cases shown in Table~\ref{tab:test_cases}. Upon execution, For all test cases in Table~\ref{tab:test_cases} all fail, which clearly implies that the results of the static analysis are incorrect: it parses up to 9 digits instead of 8. This execution trace is summarized into a feedback report that directs the LLM to revise its previous inference. Through several iterations of this process, HyBinMAS arrives at the more accurate semantic prediction shown in the "HyBinMAS" column of Table~\ref{tab:dynamic_example}.
 
-Furthermore, we acknowledge that not all functions can be executed successfully. A more complex example is presented in Figure xxx (see Appendix for decompiled code). The LLM's initial semantic interpretation was simply \lstinline{remove}, a description that is clearly imprecise. However, because this function takes a pointer to a custom structure as a parameter, attempts to generate test cases and execute it frequently lead to illegal memory access and program crashes. HyBinMAS addresses this by using an additional LLM to summarize the generated test cases and the execution failure logs into a new feedback report. By providing this consolidated feedback to the primary LLM, HyBinMAS facilitates a more accurate prediction: \lstinline{remove_env}.
+\begin{table}[h]
+    \centering
+    \caption{Partial test cases for function \lstinline{FUN_0001127bc}} % An optional caption for the table
+    \label{tab:test_cases}
+    \begin{tabular}{cccc}
+        \toprule
+        \textbf{Test Case} & \textbf{Input (\texttt{p1})} & \textbf{Expected Output} & \textbf{Actual Output} \\
+        \midrule
+        Normal Case (8 characters)      & "12345678"  & "12345678" & \textcolor{red}{"123456780"} \\
+        Insufficient Length (<8 chars)  & "1234"      & "12340000" & \textcolor{red}{"123400000"} \\
+        Excessive Length (>8 chars)     & "123456789" & "12345678" & \textcolor{red}{"123456780"} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+% Furthermore, we acknowledge that not all functions can be executed successfully. A more complex example is presented in Figure xxx (see Appendix for decompiled code). The LLM's initial semantic interpretation was simply \lstinline{remove}, a description that is clearly imprecise. However, because this function takes a pointer to a custom structure as a parameter, attempts to generate test cases and execute it frequently lead to illegal memory access and program crashes. HyBinMAS addresses this by using an additional LLM to summarize the generated test cases and the execution failure logs into a new feedback report. By providing this consolidated feedback to the primary LLM, HyBinMAS facilitates a more accurate prediction: \lstinline{remove_env}.
 
 % % ### Motivation
 
@@ -528,19 +544,19 @@ Furthermore, we acknowledge that not all functions can be executed successfully.
 % \end{figure}
 \begin{figure}[h] % [h] 表示图片放置在当前位置
     \centering
-    \includegraphics[width=0.8\textwidth]{img/Overview.drawio.png} % 调整图片宽度为文本宽度的50%
-    \caption{Overview of xxx } % 添加图片标题
+    \includegraphics[width=1.0\textwidth]{img/Overview.drawio.png} % 调整图片宽度为文本宽度的50%
+    \caption{Overview of HyBinMAS} % 添加图片标题
     \label{fig:overview} % 设置图片标签，方便引用
 \end{figure}
 
 \subsection{Overview}
 Inspired by the process human experts employ to manually comprehend the semantics of stripped functions and recover their names, we introduce \textbf{HyBinMAS}, a novel framework for binary function name recovery based on hybrid analysis and a Multi-Agent system, to address \textbf{Challange 2}. HyBinMAS identifies critical information integral to the function name recovery workflow and distills it into two fundamental services: the \textbf{HyBrid Static-and-Dynamic Analyzer (HSDA)} and the \textbf{Executor}. To fully leverage this information, HyBinMAS conceptualizes the recovery process into three crucial phases, each implemented by a dedicated Agent: the \textbf{Semantic Restorer (SR)}, the \textbf{Test Generator (TG)}, and the \textbf{Execution Validator (EV)}. To maximize the synergistic potential of these Agents and enhance the accuracy of the final name prediction, we have meticulously orchestrated their collaboration within the workflow depicted in Figure \ref{fig:overview}. Furthermore, Algorithm \ref{alg:HyBinMAS} precisely delineates the interplay between these Agents and the fundamental services.
-\begin{figure}[h] % [h] 表示图片放置在当前位置
-    \centering
-    \includegraphics[width=0.5\textwidth]{img/Overview.drawio.png} % 调整图片宽度为文本宽度的50%
-    \caption{Overview of the HyBinMAS} % 添加图片标题
-    \label{fig:overview} % 设置图片标签，方便引用
-\end{figure}
+% \begin{figure}[h] % [h] 表示图片放置在当前位置
+%     \centering
+%     \includegraphics[width=0.5\textwidth]{img/Overview.drawio.png} % 调整图片宽度为文本宽度的50%
+%     \caption{Overview of the HyBinMAS} % 添加图片标题
+%     \label{fig:overview} % 设置图片标签，方便引用
+% \end{figure}
 \begin{algorithm}
   \caption{Consensus-Guided Function Naming Algorithm}
   \label{alg:HyBinMAS}
