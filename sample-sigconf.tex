@@ -231,7 +231,7 @@
 
 Recoverying function names from stripped binary code plays an essential role in security applications by providing high-level semantic information. However, the complexity of stripped code such as underlying architectures and compilers, invocation mechanisms, and dynamic behaviors presents significant challenges. In recent years, Large Language Models (LLMs) have been extensively pre-trained and fine-tuned at the source code level to achieve more effective and generalized recovery capabilities. However, their performance is still constrained  by dataset quality, vocabulary coverage, and characteristics of underlying base models.
 
-In this paper, we propose HyBinMAS, a novel approach leveraging multi-agent collaboration and communication, comprising three agents: Semantic Restorer,  Test Generator and Execution Validator to guide the semantic understanding, test validation, and iterative correction of results. HyBinMAS also addresses several challenges, i.e., complex invocations and dynamic behaviors by enabling interactive feedback and mutual communication, as well as applying both static and dynamic analysis on binary files for a more robust and extensible recovery capability. To evaluate it, in addition to using existing datasets across x86-64, x86-32, ARM-32, and MIPS architectures, we further construct a dataset containing 3966 binary functions on the ARMv8 architecture, considering the rapid development of modern Android applications. Evaluation on datasets across five architectures reveals that HyBinMAS outperforms various state-of-the-art baselines, achieving up to 41.2\% \textit{Precision}, 52.1\% \textit{Recall}, and 46.0\% \textit{F1-score}. Furthermore, our ablation and case studies demonstrate the contribution of each module in HyBinMAS.
+In this paper, we propose HyBinMAS, a novel approach leveraging multi-agent collaboration and communication, comprising three agents: Semantic Restorer,  Test Generator and Execution Validator to guide the semantic understanding, test validation, and iterative correction of results. HyBinMAS also addresses several challenges, i.e., complex invocations and dynamic behaviors by enabling interactive feedback and mutual communication, as well as applying both static and dynamic analysis on binary files for a more robust and extensible recovery capability. To evaluate it, in addition to using existing datasets across x86-64, x86-32, ARM-32, and MIPS architectures, we further construct a dataset containing 3,966 binary functions on the ARM64 architecture, considering the rapid development of modern Android applications. Evaluation on datasets across five architectures reveals that HyBinMAS outperforms various state-of-the-art baselines, achieving up to 41.2\% \textit{Precision}, 52.1\% \textit{Recall}, and 46.0\% \textit{F1-score}. Furthermore, our ablation and case studies demonstrate the contribution of each module in HyBinMAS.
 \end{abstract}
 
 %%
@@ -295,28 +295,21 @@ In this paper, we propose HyBinMAS, a novel approach leveraging multi-agent coll
 
 \section{INTRODUCTION}
 
+\section{Introduction}
 
+The recovery of function semantics from stripped binaries is a cornerstone task in vulnerability discovery and malware forensics. Without symbolic information, analysts must infer a function's purpose, boundaries, and interactions solely from low-level code. Accurate semantic recovery enables precise vulnerability localization, malware capability assessment, and cross-architecture binary comparison. However, this task remains challenging due to the diversity of modern instruction set architectures (ISAs), compiler optimizations, and obfuscation techniques.
 
-The recovery of function semantics from stripped binaries remains a cornerstone challenge for vulnerability discovery and malware forensics, yet existing methodologies suffer from systemic limitations spanning tool design, analytical assumptions, and architectural adaptability. Industry-standard disassemblers like IDA Pro\textbf{[IDA]} and Ghidra \textbf{[GHIDRA]} prioritize static pattern matching—most notably through heuristic rules (e.g., FLIRT signatures) and manual code annotation. However, their reliance on architecture-specific signatures creates inherent fragility: FLIRT libraries optimized for x86 binaries consistently fail on alternative architectures due to divergences in calling conventions and compiler-generated code patterns. Even fundamental tasks like function boundary detection collapse under aggressive optimizations: xxx et al. (202x) demonstrated that -O3 compilation merges xx\% of OpenSSL cryptographic functions into indistinguishable blocks, obliterating signature-based recognition.
+Existing approaches can be broadly categorized into \textbf{rule-based} and \textbf{model-based} methods. Rule-based techniques, as implemented in tools such as IDA Pro\cite{ida_pro} and Ghidra\cite{Ghidra}, rely on static pattern matching and architecture-specific heuristics (e.g., FLIRT signatures). While effective on mature targets like x86 or MIPS, they often fail on alternative architectures due to differences in calling conventions, register allocation, and compiler code generation patterns\cite{binariesanalysis}. Methods such as control-flow templating and stack-frame matching exploit predictable compiler behaviors to reconstruct control flow graphs and stack layouts, but modern toolchains (e.g., LLVM) frequently introduce dynamic register usage—such as RISC-V’s t0–t6 repurposing—that violates these static assumptions. Moreover, static analysis alone cannot capture runtime phenomena including self-modifying code, dynamic loading, and just-in-time (JIT) compilation, leading to incomplete semantic recovery.
 
-Rule-based approaches, such as control flow templating and symbolic execution, have historically constituted the bedrock of binary recovery and reverse engineering. These methods leverage hand-crafted heuristics and architecture-specific rules to reconstruct control flow graphs and recover stack frames, often achieving high precision on architectures with rigid calling conventions and register usage patterns—for instance, MIPS or x86 binaries analyzed by mature tools like IDA Pro and Binary Ninja[1][2]. Stack-frame template matching, in particular, has proven effective in such static environments, as it exploits predictable register allocation and stack manipulation behaviors enforced by older or more constrained compilers[3].
+Model-based methods, including deep learning frameworks like SAFE[] and DeepBinDiff[], learn abstract code representations from large datasets for tasks such as function boundary detection and binary similarity analysis. These approaches achieve state-of-the-art results on x86, but their performance degrades on other ISAs due to instruction set disparities—e.g., RISC-V compressed instructions or ARM SIMD operations absent from x86-centric corpora. Large language models (LLMs) such as CodeBERT[] and SymGen\cite{SymGen} extend this paradigm to pseudocode generation and semantic recovery, but they remain vulnerable to architecture-specific misinterpretations (e.g., misclassifying RISC-V’s LR/SC atomic operations) and decompiler artifacts. A further bottleneck is the scarcity of high-quality, architecture-representative datasets, particularly for ARM64, whose hybrid instruction sets, runtime mode transitions, and complex security features remain underrepresented in current benchmarks.
 
-However, as modern compiler toolchains (e.g., LLVM) have become increasingly sophisticated, rule-based techniques encounter significant limitations in generalizability. On architectures such as RISC-V, compilers frequently repurpose general-purpose registers (e.g., t0–t6) for inter-procedural parameter passing and temporary storage, resulting in dynamic register allocation patterns that are fundamentally incompatible with static rule sets. This phenomenon undermines the effectiveness of control flow and stack recovery based solely on static analysis[3]. Additionally, rule-based static analysis is intrinsically unable to capture runtime behaviors that significantly affect binary semantics, such as self-modifying or self-decrypting code, dynamic loading, and just-in-time (JIT) compilation[4]. These behaviors can alter memory layouts and execution paths in ways that remain invisible to purely static tools, leading to incomplete or inaccurate recovery results.
-
-To address these challenges, researchers have increasingly turned to deep learning (DL) models, which aim to learn abstract representations of binary code directly from data, thus reducing reliance on hand-crafted rules. Notable frameworks such as SAFE[5] and DeepBinDiff[6] utilize neural networks—including self-attention and graph neural architectures—to perform tasks like function boundary detection, binary similarity analysis, and semantic recovery. These models have demonstrated state-of-the-art performance on x86 binaries, achieving high F1-scores by leveraging large-scale, well-annotated datasets and sophisticated feature extraction pipelines. However, the effectiveness of DL models is typically tightly coupled to the architecture and data distribution on which they are trained. When applied to non-x86 architectures (such as ARM or RISC-V), model performance often degrades sharply due to semantic misalignment: instruction set extensions like RISC-V’s compressed instructions (e.g., C.LWSP) and advanced SIMD operations in ARM have no direct analogs in x86-centric training corpora, resulting in poor generalization[7].
-
-Large language models (LLMs), such as CodeBERT[8] and specialized models like SymGen[9], have recently been explored for binary analysis tasks, including pseudocode generation, semantic recovery, and even automated vulnerability detection. LLMs can leverage pseudocode-driven fine-tuning to reduce out-of-vocabulary (OOV) errors and better capture high-level program structure. Nevertheless, they remain susceptible to propagating decompiler artifacts and misinterpreting architecture-specific semantics. For example, SymGen has been shown to misclassify RISC-V’s atomic LR/SC (load-reserved/store-conditional) operations as generic memory accesses, reflecting the limitations of LLMs in handling concurrency primitives and low-level architectural features not well represented in their training data[9].
-
-Meanwhile, the rapid proliferation of ARMv8—especially within the Android ecosystem—has exposed further methodological deficiencies in current binary analysis practices. ARMv8 introduces hybrid instruction sets, multiple backward-compatible execution modes, and intricate security mechanisms, all of which significantly complicate both rule-based and learning-based recovery methods[10]. A critical bottleneck is the lack of domain-specific benchmarks and high-quality, architecture-representative datasets for ARMv8 binaries, which hampers the systematic evaluation and comparison of disassembly and semantic recovery techniques. Existing datasets often fail to capture ARMv8’s distinctive features, such as dynamic opcode interleaving, runtime mode transitions, and sophisticated obfuscation or security logic. As a result, both conventional static analysis tools and modern ML/LLM-based approaches struggle to provide reliable results when analyzing binaries compiled for ARMv8 platforms.
-
-In this paper, we introduce HyBinMAS, a novel approach that leverages multi-agent collaboration, and hybrid static and dynamic analysis. HyBinMAS incorporates three specialized agents: Semantic Restorer, responsible for acquiring semantic insights of the target function to guide test case generation; Test Generator, tasked with designing and executing targeted test cases; and Execution Validator, focused on analyzing the results produced by the Executor and generating feedback to enhance semantic comprehension. These agents are designed to support bidirectional communication: Semantic Restorer provides semantic guidance to Test Generator, facilitating the creation of more effective test cases. Test Generator collects dynamic execution information and shares it with both Semantic Restorer and Execution Validator. Execution Validator conducts error correction and validation based on runtime exceptions, and subsequently delivers corrective feedback and validation outcomes to both Semantic Restorer and Test Generator. This collaborative and iterative process enables more precise and comprehensive semantic understanding of the target function.
-Furthermore, HyBinMAS integrates both static and dynamic analysis among the multi-agent framework to achieve more robust and extensible recovery capabilities. Specifically, the static analyzer extracts comprehensive static information from the target function, including disassembled code, pseudo-C representations, and parts of simple call and dependency information. The dynamic analyzer provides a controlled execution environment and captures rich runtime information such as function parameters, return values, instruction-level traces, and runtime error messages. Moreover, the dynamic analyzer is capable of collecting intricate invocation details that are often elusive to static analysis, thereby offering a more complete view of the function's behavior for the multi-agent framework.
+To overcome these limitations, we propose \textbf{HyBinMAS}, a multi-agent framework combining hybrid static and dynamic analysis. HyBinMAS orchestrates three specialized agents—Semantic Restorer, Test Generator, and Execution Validator—in an iterative, bidirectional collaboration. Static analysis extracts disassembly, pseudo-C code, and call/dependency graphs, while dynamic analysis captures runtime parameters, return values, instruction traces, and error states. This integration enables a more precise and architecture-agnostic recovery of function semantics, bridging the gap between static completeness and dynamic fidelity.
 
 To summarize, we make the following contributions:
 
 \begin{itemize}
     \item We propose a novel multi-agent LLM-guided framework that integrates both static and dynamic analysis methods. This approach leverages a multi-agent architecture with feedback and inter-agent communication mechanisms. On top of traditional static analysis, we incorporate dynamic analysis by introducing runtime information. Our framework effectively addresses challenges such as out-of-vocabulary (OOV) symbols, dynamic and complex program behaviors, and intricate function invocations, which are inadequately handled by existing solutions.
-    \item We construct a comprehensive dataset of shared objects (SOs) specifically targeting the ARM64 architecture, thereby addressing the limitations of previous benchmarks that primarily focused on ARM32 and older architectures. Furthermore, we conduct an in-depth analysis and systematic summary of SO patterns unique to the latest ARM64 architecture. To the best of our knowledge, this work is the first to enable function name recovery for stripped binaries on the newest ARMv8 architecture from a general perspective. In addition, our approach maintains compatibility with existing architectures, including x86-64, x86-32, ARM-32, and MIPS.
+    \item We construct a comprehensive dataset of shared objects (SOs) specifically targeting the ARM64 architecture, thereby addressing the limitations of previous benchmarks that primarily focused on ARM32 and older architectures. Furthermore, we conduct an in-depth analysis and systematic summary of SO patterns unique to the latest ARM64 architecture. To the best of our knowledge, this work is the first to enable function name recovery for stripped binaries on the newest ARM64 architecture from a general perspective. In addition, our approach maintains compatibility with existing architectures, including x86-64, x86-32, ARM-32, and MIPS.
     \item We conduct extensive comparative experiments on both public datasets constructed by SymGen and our newly constructed dataset , benchmarking our static analysis method against state-of-the-art approaches (SymGen and XFL). Our static method demonstrates a significant improvement over SymGen, achieving an increase of XXX. Furthermore, by incorporating dynamic analysis on our dataset, we achieve an accuracy of XXX, representing an additional enhancement of XXX over static-only approaches.
     \item All datasets and source code used in this study have been open-sourced, facilitating future research and reproducibility.
 \end{itemize}
@@ -854,7 +847,11 @@ Evidently, the Fallback Analyzer and Normal Analyzer constitute the core compone
 
 \subsection{Dataset Construction}
 
-To objectively evaluate the applicability of our tool across multiple architectures and to facilitate direct comparison with existing baseline methods, our benchmark is divided into two distinct parts. The first part, Baseline Benchmark\cite{SymGen}, comprises datasets that are widely adopted by prior works, covering architectures such as x86-64, x86-32, ARM-32, and MIPS. The second part, ARM-64 Benchmark, is a newly curated dataset specifically targeting the ARM-64 architecture. This dataset is manually collected and constructed from various open-source repositories, addressing the lack of publicly available ARM-64 datasets in the existing literature.
+The benchmark dataset in this study consists of two parts: \textbf{Baseline Benchmark} and \textbf{ARM-64 Benchmark}. The Baseline Benchmark reproduces the dataset construction methodology of \textbf{SymGen}, extracting only shared library files from its 33 GNU projects and augmenting them with assembly code, disassembly, and call graphs to meet the input requirements of \textbf{HyBinMAS}.
+
+The ARM-64 Benchmark is newly curated for semantic understanding tasks on Android native libraries, addressing the lack of ARM-64 datasets. The construction process is shown in the Figure \ref{fig:construct-dataset}. First, open-source Android projects were selected to reflect characteristics of closed-source applications. From an initial pool of 106 projects, 26 candidates were identified based on executability, availability of native C/C++ code, compatibility with modern Android versions (targeting Android~15), project quality, domain diversity, and recent maintenance. Second, APKs were built using Gradle and CMake, producing both \textbf{Release} and \textbf{Release-DWARF} variants, ensuring identical machine code between the two. Third, ground-truth function names were extracted from the source code using Tree-sitter. Fourth, functions in the binaries were aligned with their ground-truth names by leveraging identical address offsets and DWARF-provided source locations, enabling precise mapping between assembly, decompiled code, and source code. Finally, filtering was applied to remove functions with retained symbols after stripping, functions with fewer than five assembly instructions, and duplicate functions within an APK according to debug information.
+
+The resulting dataset comprises \textbf{6 Android projects} and \textbf{3,966 binary functions}, covering diverse application domains and supporting both cross-architecture comparison and ARM-64-specific semantic analysis. Detailed information for each project is presented in the last line of Table~\ref{table:data}.
 
 \begin{figure}[t] % [h] 表示图片放置在当前位置
     \centering
@@ -889,46 +886,6 @@ To objectively evaluate the applicability of our tool across multiple architectu
 \renewcommand\arraystretch{1.0}
 
 
-\subsubsection{Baseline benchmark}
-Many studies in function name recovery utilize projects from the GNU ecosystem to construct dataset. For instance, SymGen\cite{SymGen} manually compiled 33 GNU projects to construct their evaluation dataset. To ensure a fair and direct comparison with our baselines, we replicated the dataset construction methodology proposed by SymGen. It is important to note that the original SymGen dataset is extensive, comprising a vast number of functions from both executable files and shared libraries. Constrained by the token consumption of the \textbf{HyBinMAS} framework, and to establish a level playing field with the dataset we introduce later, we elected to extract only the shared library files from their collection for RQ1. Furthermore, the original dataset provided by SymGen contains only decompiled code and lacks other artifacts required by \textbf{HyBinMAS} (such as assembly code and call graphs). We therefore processed the binaries to supplement this dataset with the necessary additional information. %The statistical details of the resulting dataset are presented in Figure~\ref{fig:symgen_dataset_stats}.
-
-
-
-\subsubsection{ARM-64 benchmark}
-To the best of our knowledge, no dedicated dataset currently exists for semantic understanding tasks on Android Native Libraries, such as function name recovery and comment generation. Although numerous data sets are available for stripped binaries, they are inadequate for our purposes. These existing datasets either lack compilation variants for the ARM64 architecture or are not executable on Android devices, which is unacceptable for our method. Therefore, we are working on the construction of a new specialized dataset. The overview of this process is illustrated in Figure~\ref{fig:construct-dataset}.
-
-\textbf{1)Android Project Selection}. Our ultimate objective is to analyze closed-source applications. Therefore, the primary principle guiding our selection of open-source projects is to ensure they accurately reflect the characteristics of their closed-source counterparts. Inspired by BinMetric\cite{BinMetric} and BinaryLLM-Eval\cite{BinaryLLM-Eval}, we adapt and extend their critera to align with the specific requirements of our work:
-
-\begin{itemize}
-    \item \textbf{Executability:} The requirement for executability is twofold. The first consideration is practical applicability, necessitating that the target application be runnable. The second is the operational constraints imposed by the Executor within our proposed approach.
-
-    \item \textbf{Native Code  Availability:} Selected projects must contain native source code (implemented in C or C++). This is crucial as projects providing only pre-compiled .so files would prevent us from obtaining the ground-truth function semantics (i.e., names and comments). It is critical that the target functions must be non-exported. This ensures that their symbol information can be completely removed during the stripping process without impairing the application's runtime functionality—a task that is infeasible for exported functions.
-
-    \item \textbf{Realisticity and Modernity:} To ensure the dataset reflects contemporary and real-world scenarios, the selected projects must be compatible with the recent Android versions. At the time of our data collection, with Android 14+ gradually becoming the mainstream system, we established Android 15 compatibility as our target standard.
-
-    \item \textbf{Project Quality:} High-quality projects are essential, as factors like code clarity and structure can significantly influence the performance of semantic analysis. We identified quality through characteristics such as a well-organized project structure, clear logical implementation, and adherence to good naming conventions. Project quality can be quantifiedby its Stars and Forks on GitHub.
-
-    \item \textbf{Domain Diversity:} To comprehensively evaluate the generalization capabilities of our proposed method, the dataset should encompass applications from a broad range of domains. We identify and include projects from the following categories: Communication \& Social Networking,  Science \& Education, Multimedia, Game, Finance and Tools. It is important to acknowledge that these categories do not cover the full spectrum of real-world applications. Numerous projects from other domains were filtered out as their failure to meet the first criterion.
-
-    \item \textbf{Maintenance Status:} To ensure the relevance of the compiled binaries and their underlying code, projects were required to have a recent history of updates or maintenance. We have chosen 5 years as the threshold.
-\end{itemize}
-
-From an initial survey of \textbf{106} Android application projects, we downloaded \textbf{26} candidates based on the requirements outlined above. During the subsequent compilation and build process, we filtered out any project that could not be constructed as specified (see details below), resulting in a final corpus of \textbf{6} APKs. These artifacts are then subjected to the subsequent processing stages (Steps \normalsize{\textcircled{\scriptsize{3}}}\normalsize–\normalsize{\textcircled{\scriptsize{7}}}\normalsize) illustrated in Figure~\ref{fig:construct-dataset}.
-
-
-\textbf{2)APK Construction}. We utilized Gradle\footnote{https://gradle.org/} and CMake\footnote{https://cmake.org/} to complete the build tasks. For each application, we compiled two distinct variants: \textbf{Release} and \textbf{Release-DWARF}. It is important to note that we deliberately avoided the common practice of building a standard Debug version with DWARF information for its Release counterpart. This is because build tools like Gradle and the NDK\cite{NDK} apply different configurations (e.g., varying optimization levels) to Debug and Release builds. Such discrepancies will result in non-identical native code, thereby complicating the subsequent alignment process.
-
-Instead, our approach uses the standard Release as the baseline. We generate the \textbf{Release-DWARF} variant by augmenting the Release binaries with DWARF information while ensuring the underlying machine code remained unchanged. The final executable deployed on the Android system is also the standard Release, which perfectly aligns with real-world scenarios. Consistent with established practices in previous research, we apply Step \normalsize{\textcircled{\scriptsize{3}}}\normalsize and  \normalsize{\textcircled{\scriptsize{4}}}\normalsize to generate the corresponding disassembly, decompiled code, and $\mathcal{ACG}$ for these binaries.
-
-
-\textbf{3)Ground-Truth Construction}. This process begins with the extraction of native source code from the selected projects (as shown in step \normalsize{\textcircled{\scriptsize{5}}}\normalsize). We designated the developer-written function names as the ground-truth. This was accomplished by parsing the C/C++ source code using tree-sitter\cite{tree_sitter} (\normalsize{\textcircled{\scriptsize{6}}}\normalsize).
-
-\textbf{4)Alignment}. In step \circlenum{2}, we obtained the binary variant that includes DWARF information. This variant shares identical function address offsets with its stripped counterpart, which allows for a straightforward alignment of the function body with their corresponding function name. Furthermore, the DWARF data contains precise records of the source code locations (i.e., file and line number) for each function and variable. This information serves as the definitive basis for aligning the decompiled code with the original source code. Through this two-step alignment process, we can reliably link each function in the binary (represented by both its assembly and deompiled code) to its corresponding ground-truth.
-
-
-\textbf{5)Filtering and Leakage Check}. To accurately simulate the senarios of real-world applications, we implemented three filtering steps. First, we filtered out any functions that retained their symbol information post-stripping to avoid overestimating the method's performance. Second, we discarded functions with very small bodies (defined as having fewer than 5 assembly instructions). Third, we remove identical functions within an APK according to its Debug info.
-
-Ultimately, we get 6 Android projects and 3996 binary functions for our dataset. Detailed information for each project is presented in the last line of Table~\ref{table:data}.
 % \renewcommand\arraystretch{1.31}
 % \vspace{-0.5em} % 表格后减少0.5em的空白
 % \begin{table}[!ht]
@@ -980,7 +937,7 @@ Our experiments were performed on a server running Ubuntu 20.04, equipped with a
 
 
 \section{Evaluation}
-To evaluate xx, we propose the following research questions.
+To evaluate HyBinMAS, we propose the following research questions:
 \begin{itemize}
     \item \textbf{RQ1:} How effective and generalizable is xx compared with the state-of-the-art approaches across different architectures (e.g., x86-64, x86-32, ARM-32, MIPS, ARM64)?
     %在现有benchmark 跑xx静态分析和baseline；在arm64跑xx静态分析+baseline（按原论文逻辑切分测试集数据集？）
@@ -1001,66 +958,98 @@ To evaluate xx, we propose the following research questions.
     % \begin{tabular}{c|ccccccc|c}
     \begin{tabular}{p{2cm}p{.4cm}p{.4cm}p{.6cm}p{.4cm}p{.4cm}p{.6cm}p{.4cm} p{.4cm}p{.6cm}p{.3cm} p{.3cm}p{.3cm}}
     \toprule
-    \multirow{2}*{Projects}& \multicolumn{3}{c}{\textbf{XFL}}&\multicolumn{3}{c}{\textbf{SymGen}}&\multicolumn{3}{c}{\textbf{xx-static}}&\multicolumn{3}{c}{\textbf{xx-dynamic}} \\
-    \cline{2-4}\cline{5-7}\cline{8-10}\cline{11-13}
-     &  P & R & F1&  P & R & F1&  P & R & F1 &  P & R & F1 \\
+    \multirow{2}*{Projects}& \multicolumn{3}{c}{\textbf{XFL}}&\multicolumn{3}{c}{\textbf{SymGen}}&\multicolumn{3}{c}{\textbf{HyBinMAS}} \\
+    \cline{2-4}\cline{5-7}\cline{8-10}
+     &  P & R & F1&  P & R & F1&  P & R & F1  \\
     \hline
     Baseline x86-64  \\
-    - o0 & 0.922 & 0.867 & 0.893 & 0.651 & 0.531 & 0.585 & 0.650 & 0.600 & 0.624 &- &- &- \\
-    - o1 \\
-    - o2 \\
-    - o3 \\
+    - o0 & 0.169 & 0.140 & 0.153 & 0.346 & 0.356 & 0.351 & 0.650 & 0.600 & 0.624  \\
+    - o1 & 0.188 & 0.133 & 0.156 & 0.376 & 0.387 & 0.381 \\
+    - o2 & 0.196 & 0.177 & 0.186 & 0.383 & 0.401 & 0.392\\
+    - o3 & 0.203 & 0.175 & 0.188 & 0.388 & 0.407 & 0.397\\
     \hline
-    Baseline x86-32 & 0.922 & 0.867 & 0.893 & 0.651 & 0.531 & 0.585 & 0.650 & 0.600 & 0.624 &- &- &- \\
-    Baseline MIPS & 0.922 & 0.867 & 0.893 & 0.651 & 0.531 & 0.585 & 0.650 & 0.600 & 0.624 &- &- &- \\
-    Baseline ARM-32 & 0.922 & 0.867 & 0.893 & 0.651 & 0.531 & 0.585 & 0.650 & 0.600 & 0.624 &- &- &- \\
-    ARM-64 Bench & - & - & - & 0.187 & 0.195 & 0.191 & 0.643 & 0.585 & 0.613 \\
+    Baseline x86-32 \\
+    - o0 & - & - & - & 0.297 & 0.315 & 0.306\\
+    - o1 & - & - & - & 0.314 & 0.324 & 0.319\\
+    - o2 & - & - & - & 0.342 & 0.356 & 0.348\\
+    - o3 & - & - & - & 0.342 & 0.358 & 0.349\\
+    \hline
+    Baseline MIPS \\
+    - o0 & - & - & - & 0.144 & 0.148 & 0.146\\
+    - o1 & - & - & - & 0.138 & 0.140 & 0.139\\
+    - o2 & - & - & - & 0.130 & 0.131 & 0.130 & 0.314 & 0.347 & 0.327\\
+    - o3 & - & - & - & 0.135 & 0.134 & 0.134 & 0.340 & 0.368 & 0.350\\
+    \hline
+    Baseline ARM-32 \\
+    - o0 & - & - & - & 0.240 & 0.238 & 0.239 \\
+    - o1 & - & - & - & 0.265 & 0.257 & 0.261 & \\
+    - o2 & - & - & - & 0.268 & 0.269 & 0.269 & 0.320 & 0.360 & 0.338\\
+    - o3 & - & - & - & 0.280 & 0.276 & 0.280 & 0.316 & 0.343 & 0.327\\
+    \hline
+    ARM-64 Bench & - & - & - & 0.187 & 0.195 & 0.191 & \textbf{0.378} & \textbf{0.351} & \textbf{0.364} \\
      \hline
     \end{tabular}%
 \end{table}%
 \renewcommand\arraystretch{1.0}
 
-To evaluate xxx .... we
+To answer RQ1, we evaluated the performance of HyBinMAS on the Baseline Benchmark and compared it with SymGen and XFL. We use the default configurations for all baselines. Since SymGen did not provide a complete test set, we did not re-run the training parameters provided by SymGen on the Baseline Benchmark to avoid data leakage. Instead, we directly used the results reported in their paper. For XFL, we also used the results reported in the SymGen paper.
+
+Table~\texttt{xxx} presents the performance of HyBinMAS and the baselines across four different architectures and four optimization levels. On average, HyBinMAS achieved an accuracy of \texttt{xxx}, a recall of \texttt{xxx}, and an F1-score of \texttt{xxx}. In comparison, SymGen achieved \texttt{xxx} accuracy, \texttt{xxx} recall, and \texttt{xxx} F1 Score, while XFL achieved \texttt{xxx} accuracy, \texttt{xxx} recall, and \texttt{xxx} F1. In terms of accuracy, recall, and F1-score, HyBinMAS achieved improvements of \texttt{xxx}, \texttt{xxx}, and \texttt{xxx} over SymGen, and \texttt{xxx}, \texttt{xxx}, and \texttt{xxx} over XFL.
+
+For the \texttt{arm\_32} architecture, HyBinMAS achieved an average accuracy of \texttt{xxx}, recall of \texttt{xxx}, and F1-score of \texttt{xxx}, corresponding to improvements of \texttt{xxx}, \texttt{xxx}, and \texttt{xxx} over SymGen. For the \texttt{mips\_32} architecture, HyBinMAS achieved an average accuracy of \texttt{xxx}, recall of \texttt{xxx}, and F1-score of \texttt{xxx}, with improvements of \texttt{xxx}, \texttt{xxx}, and \texttt{xxx} over SymGen. For the \texttt{x86\_64} architecture, HyBinMAS achieved an average accuracy of \texttt{xxx}, recall of \texttt{xxx}, and F1-score of \texttt{xxx}.
+
+
+Additionally, we reproduced SymGen and evaluated both HyBinMAS and SymGen on our constructed ARM64 Benchmark. Since XFL is only applicable to x86 architectures, we did not include it in this experiment. The results, shown in the last row of Figure~\texttt{xxx}, indicate that on the ARM64 Benchmark, SymGen achieved an average accuracy of 0.187, recall of 0.195, and F1-score of 0.191. In contrast, HyBinMAS achieved significantly higher results: 0.378 accuracy, 0.351 recall, and 0.364 F1-score.
+
+Unlike SymGen, whose performance varies significantly across architectures, HyBinMAS demonstrates robustness with minimal sensitivity to architecture differences. This is particularly evident in the \texttt{arm\_32} and \texttt{mips\_32} architectures, where SymGen’s recovery performance is far below its performance on x86 architectures. For \texttt{mips\_32}, SymGen’s F1-score is even below 0.15, whereas HyBinMAS achieves performance close to or at its average level on both \texttt{mips\_32} and \texttt{arm\_32}.
+
+We observed an important finding: SymGen demonstrates outstanding performance on its provided x86 dataset but performs significantly worse on ARM, \texttt{mips\_32}, and our ARM64 Benchmark. We attribute this to the limited generalization capability of fine-tuned small models, such as SymGen. In contrast, HyBinMAS not only achieves exceptional results on our ARM64 Benchmark but also matches SymGen’s performance on its own dataset and even surpasses it on \texttt{arm\_32} and \texttt{mips\_32} architectures. The two-fold experiments conducted strongly demonstrate that HyBinMAS achieves superior effectiveness compared to existing methods.
+
+% 为了回答RQ1，我们评估了HyBinMAS在Baseline Benchmark上的表现，并且与SymGen、XFL等Baseline的结果进行对比。我们使用了这些Baseline的默认配置，由于SymGen没有提供完整的测试集，所以我们没有将SymGen提供的训练参数在Baseline Benchmark重新运行，因为这会导致数据泄露的情况，相反我们直接使用了论文中的数据，对于XFL我们也直接使用SymGen论文中的结果。表xxx展示了HyBinMAS和Baseline在4个不同的架构和4个不同的优化等级上的表现。我们注意到HyBinMAS平均实现了xxx的准确率、xxx的召回率和xxx的F1值；而SymGen则平均实现了xxx的准确率、xxx的召回率和xxx的F1值，XFL实现了xxx的准确率、xxx的召回率和xxx的F1值。在准确率、召回率和F1值上，HyBinMAS分别实现了相较于SymGen xxx、xxx和xxx、的提升幅度和相较于XFL xxx、xxx和xxx、的提升幅度。对于arm_32架构，HyBinMAS实现平均xxx的准确率、xxx的召回率和xxx的F1值，相较于SymGen有xxx、xxx和xxx的提升。对于mips_32架构，HyBinMAS实现了平均xxx的准确率、xxx的召回率和xxx的F1值，相较于SymGen有xxx、xxx和xxx的提升。对于x86_64架构，HyBinMAS实现了平均xxx的准确率、xxx的召回率和xxx的F1值。
+% 相较于SymGen在不同架构上的表现具有较大差异，HyBinMAS的有效性不容易受到架构的干扰，其中最明显的例子是arm_32架构和mips_32架构。在这两个架构下，SymGen的恢复效果远远差于在x86架构下的恢复效果。其中mips_32架构在F1值上甚至低于0.15；而HyBinMAS则在mips_32架构和arm_32架构上的表现均能达到或接近平均水平。
+% 除此之外，我们还复现了SymGen，并使用我们构造的ARM64 Benchmark评估HyBinMAS和SymGen的表现，由于XFL只能用于x86架构，所以我们并没有对其进行实验。通过实验，我们得到了如图xxx所示的最后一行的结果。在ARM64 Benchmark上，SymGen平均实现了0.187的准确率、0.195的召回率和0.191的F1得分，而HyBinMAS则实现了远超Baseline的效果：分别达到了0.378准确率、0.351的召回率和0.364的F1得分。我们观察到一个重要的事实：SymGen在它们提供的数据集的x86架构上具有非凡的表现，但是在arm架构、mips_32架构和我们构造的ARM64 Benchmark上却表现出远差于前者的表现，我们指出这是因为以SymGen为代表的微调小模型的路线仍然存在泛化性的问题。相反，HyBinMAS不仅在我们构造的ARM-64 Benchmark上具有非凡的表现，同时也在SymGen的数据集上具有和SymGen媲美的表现，甚至在arm_32架构和mips_32架构上具有更好的表现。我们进行的两折实验充分的证明了HyBinMAS实现了比现有方法更优的有效性。
+
+
+
 
 \subsection{RQ2: Improvement of dynamic analysis}
+\subsubsection{Result}
+To answer RQ2, we removed all components in HyBinMAS that involve dynamic information, including the $\mathcal{E}_d$ of $\mathcal{ACG}$ in HA, the dynamic information used by SR, TD, TG, and EV, resulting in the \textbf{HyBinMAS-Static} variant. Based on the experiment in RQ1, we constructed the ARM64-Dynamic Benchmark by selecting \texttt{xxx} functions from our ARM64 Benchmark that can be dynamically executed. We then evaluated both HyBinMAS and HyBinMAS-Static on this dataset.
 
-\iffalse
-\begin{table}[t]
-  \centering
-  \footnotesize
-\caption{Recovery results for complex patterns}\label{tab:dy3}
-  \renewcommand\arraystretch{1.15}
-\begin{tabular}{p{1.7cm}p{1.7cm}p{1.2cm}p{1.2cm}p{1.2cm}p{1.2cm}p{1.2cm}}
-\toprule
-patterns & sub-pattern &xx dynaic &xx static & xfl &symGen    \\
-\midrule
-\textbf{Method(19)} & Missing(12) &5 &1 &\textbf{9} &5 &2 \\
-\textbf{Method(19)} & Noncallable(6) &5 &1 &\textbf{9} &5 &2 \\
-\textbf{Return value(29)} & Noncallable(6) &\textbf{17}&\textbf{5}&0&0&7\\
-\bottomrule
-\end{tabular}
-\end{table}
+Table~\texttt{xxx} presents the performance of SymGen, HyBinMAS-Static, and HyBinMAS on the ARM64-Dynamic Benchmark. SymGen achieved an accuracy of \texttt{xxx}, a recall of \texttt{xxx}, and an F1-score of \texttt{xxx}. HyBinMAS-Static achieved an accuracy of \texttt{xxx}, a recall of \texttt{xxx}, and an F1-score of \texttt{xxx}, already surpassing the SOTA performance using only static information. Leveraging full dynamic information, HyBinMAS achieved accuracy, recall, and F1-score of \texttt{xxx}, \texttt{xxx}, and \texttt{xxx}, respectively—corresponding to improvements of \texttt{xxx}, \texttt{xxx}, and \texttt{xxx} over SymGen, and \texttt{xxx}, \texttt{xxx}, and \texttt{xxx} over HyBinMAS-Static.
+
+\subsubsection{Case Study}
+Through manual inspection of functions in the ARM64-Dynamic dataset, we identified several common complex patterns in binary function name recovery:
+
+\begin{itemize}
+    \item \textbf{Extensive function calls.} A significant portion of the analyzed binary function’s logic is implemented via direct or indirect calls to other functions. This requires the recovery method to accurately analyze the calling context and understand the semantics of the callee functions, which is a substantial challenge.
+    \item \textbf{Complex control flows.} Decompiled code of the analyzed functions often contains loops with intricate termination conditions and deeply nested branching statements, posing difficulties to the effectiveness of recovery methods.
+    \item \textbf{Heavy pointer arithmetic.} Many analyzed functions operate on custom structure types, leading to numerous obscure pointer offsets and dereferencing operations in the decompiled code, which can hinder semantic understanding.
+\end{itemize}
+
+We categorized the functions in the ARM64-Dynamic dataset according to these patterns. As shown in Figure~\texttt{xxx}, the dataset contains 90 functions with extensive function calls (46.9\%), 69 with complex control flows (36.0\%), and 33 with heavy pointer arithmetic (17.1\%).
+
+As an example, the function \texttt{copynode234} from the Motivation section falls into the “extensive function calls” category. Its primary logic performs a depth-first traversal of a tree, during which it calls \texttt{p2} to copy nodes. However, since \texttt{p2} is a function pointer, its call target cannot be resolved statically. Without this information, HyBinMAS-Static predicts only \texttt{dfs}, and SymGen predicts \texttt{dfs\_tree}. By resolving the indirect call, we found that \texttt{p2} actually points to the function \texttt{FUN\_001461a4} (shown in Figure~\texttt{xxx}), whose highlighted code segment indicates copy-related logic. Based on this, HyBinMAS correctly infers the function name as \texttt{copy\_node}.
+
+Another example is the \texttt{ParseNanos} function from the Motivation section. Due to compiler optimizations, the loop termination condition \texttt{len < 9} was transformed into \texttt{8 < uVar3}. Although logically equivalent, this transformation increases the difficulty of understanding the function. HyBinMAS-Static predicted \texttt{parse\_8\_digits}. By constructing test cases, executing them, and collecting and summarizing trace information, HyBinMAS produced a more accurate prediction: \texttt{parse\_9\_digits}.
 
 
-\renewcommand\arraystretch{1.15}
-\begin{table}
-  \centering
-  \footnotesize
-\caption{Recovery results for complex patterns}\label{tab:dy2}
-\begin{tabular}{p{1cm}p{.3cm}p{.7cm}p{.3cm}p{.7cm}p{.6cm}p{1cm}p{.4cm}p{.7cm}p{.4cm}p{.7cm}p{.4cm}p{.7cm}p{.5cm}p{.5cm}}
-\toprule
-& \multicolumn{2}{c}{Total} & \multicolumn{2}{c}{Method call} & \multicolumn{2}{c}{Passed arguments} & \multicolumn{2}{c}{Return value} & \multicolumn{2}{c}{Caller object}&\multicolumn{2}{c}{Code-context}&\multicolumn{2}{c}{System-context}\\
-Approach & \#of & \%ofA & \#of & \%ofA & \#of & \%ofA & \#of & \%ofA & \#of & \%ofA & \#of & \%ofA & \#of & \%ofA\\
-\midrule
-xx-dyn & 21  & 21.00 & 0  &0.00 &6 &18.18 & 8 &88.89 &3 &100.00 &0 &0.00 &4 &28.57  \\
-xx-static& 26 & 15.85 & 3 &6.67 & 12 & 20.69 &6 &100.00 &1 &100.00 &0 &0.00 &4 &22.22 \\
-SymGen&61   & 22.02& 6 &6.06  & 29 &34.52 &8 &100.00 &4 &100.00 &1 &5.56 &13 &22.81 \\
-XFL& 17  & 19.32 & 2 & 5.13 & 13 & 39.39 &1 &100.00 &0 &\mbox{-} &0 &0.00 &1 &10.00  \\
-\bottomrule
-\end{tabular}
-\end{table}
-\renewcommand\arraystretch{1.0}
-\fi
+% Result
+% 为了回答RQ2，我们将HyBinMAS中涉及动态信息的组件移除，包括：HA中的动态调用信息、SR使用的动态信息、TD、TG和EV，得到HyBinMAS-Static变体。我们在RQ1的基础上，从我们构造的ARM64 Benchmark中筛选出了能够被动态执行到的xxx个函数组成ARM64-Dynamic Benchmark。并在该数据集上分别评估HyBinMAS和HyBinMAS-Static的效果。
+% 表xxx展示了SymGen、HyBinMAS-Static和HyBinMAS在ARM64-Dynamic Benchmark上的表现。可以看到，SymGen在该数据集上实现了xxx的准确率、xxx的召回率和xxx的F1得分，而HyBinMAS-Static则实现了xxx的准确率、xxx的召回率和xxx的F1得分，而仅使用静态信息的HyBinMAS-Static已经实现了超过SOTA的水平。相较于次，充分利用动态信息的HyBinMAS则在准确率、召回率和F1得分上分别实现了xxx、xxx和xxx，相较于SymGen有xxx、xxx和xxx的提升，相较于HyBinMAS-Static则实现了xxx、xxx和xxx的提升。
+
+% Case Study
+% 通过人工分析ARM64-Dynamic数据集中的函数，我们总结出了在二进制函数名称恢复中常见的复杂模式：
+% 1. 充斥大量函数调用。被分析的二进制函数的逻辑很大一部分是通过直接或间接调用其他函数实现的。这要求函数名称恢复方法必须准确分析函数的调用上下文，并在理解被调用函数逻辑的基础上准确恢复目标函数的函数名，这无疑是一个巨大的挑战。
+% 2. 包含复杂的控制流。被分析的二进制函数的反编译代码中包含结束条件复杂的循环、深度嵌套的分支语句。这对函数名称恢复方法的有效性提出了困难的挑战。
+% 3. 包含大量复杂的指针运算。被分析的二进制函数包含许多对自定义结构体类型的操作，导致在反编译代码中出现很多晦涩难懂的指针偏移和解引用操作。这在无形之中干扰了方法对函数语义的理解。
+% 我们将ARM64-Dynamic数据集中的函数进行归类，得到了图xxx所示的统计信息，在数据集中这三种模式分别有90、69和33个，分别占据了46.9%、36.0%和17.1%的比例。
+
+% 我们以Motivation中的函数copynode234为例，它属于“充斥大量函数调用”这种复杂模式，因为在该函数本身的逻辑是对树进行深度优先遍历，并在遍历的过程中调用p2来实现节点拷贝。然而p2是一个函数指针，我们无法在静态解析其调用目标，因而缺失了对于该函数的逻辑，从而HyBinMAS-Static只能预测出dfs的结果，而SymGen也只能预测出dfs_tree的结果。但我们通过解析间接调用，发现p2实际指向了图xxx中的FUN_001461a4函数，其函数体中的黄色高亮部分表明其逻辑与copy有关，在此基础上HyBinMAS便能够更准确地推断出函数的名称是copy_node。
+
+% 另一个示例是Motivation中的ParseNanos，因为编译优化的存在，循环的结束条件"len < 9"被优化成了"8 < uVar3"，虽然在编译器保证二者在逻辑上等价，但是这增加了理解的困难性，HyBinMAS-Static给出了parse_8_digits的结果。通过构造测试样例、执行、捕获与总结trace信息，HyBinMAS则给出了更加准确的结果：parse_9_digits。
+
+
 
 % \subsection{RQ3: Efficiency of xx}
 \subsection{RQ3: Ablation study}
@@ -1081,7 +1070,7 @@ XFL& 17  & 19.32 & 2 & 5.13 & 13 & 39.39 &1 &100.00 &0 &\mbox{-} &0 &0.00 &1 &10
     \hline
     Tree-LSTM & 0.589 & 0.366 & 0.451 \\ \hline
     CodeBERT & 0.534 & 0.468 & 0.502 \\ \hline
-    GraphCodeBERT & 0.555 & 0.457 & 0.509 \\ 
+    GraphCodeBERT & 0.555 & 0.457 & 0.509 \\
     \hline
     \end{tabular}%
 \end{table}%
@@ -1111,39 +1100,53 @@ XFL& 17  & 19.32 & 2 & 5.13 & 13 & 39.39 &1 &100.00 &0 &\mbox{-} &0 &0.00 &1 &10
 \end{table}%
 \renewcommand\arraystretch{1.0}
 
+In this section, we conduct ablation studies to demonstrate that both the call relationship and the Execution Validator (EV) make indispensable contributions to the effectiveness of HyBinMAS.
+
+To verify that incorporating call relationships facilitates the understanding of binary functions, we removed the ACG component from HSDA, resulting in a HyBinMAS variant named \texttt{HyBinMAS-ACG}. We emphasize that the inclusion of EV significantly improves the efficiency of feedback; without it, the function name prediction quality may degrade due to contextual noise and hallucinations. Therefore, we removed EV from HyBinMAS and directly passed the execution information to the Semantic Restorer, forming another variant named \texttt{HyBinMAS-EV}.
+
+In addition, we designed a variant in which all agent operations were removed, leaving only the LLM within the Semantic Restorer—this variant is referred to as \texttt{LLM}. Keeping all other settings unchanged, we repeated the RQ1 experiments on the ARM64 Benchmark for these three variants.
+
+We used the F1-score of SymGen from RQ1 as a threshold. For HyBinMAS and its three variants, we filtered their prediction results to retain only those with an F1-score above the threshold. We then collected all such samples and visualized the results using a Venn diagram, as shown in Figure~\texttt{xxx}. In the diagram, the elements within a set represent the function names predicted by the corresponding method that outperform the baseline average (e.g., HyBinMAS predicts \texttt{xxx} such function names in Figure~\texttt{xxx}). The intersections between sets indicate the common subset of superior predictions shared by the corresponding methods (e.g., HyBinMAS and HyBinMAS-ACG share \texttt{xxx} identical function names in Figure~\texttt{xxx}).
+
+From the comparison between HyBinMAS and HyBinMAS-ACG in the Venn diagram, we observe the following:
+
+Figure~\texttt{xxx}(a) illustrates the performance gap before and after removing ACG. We find that removing ACG causes the accuracy, recall, and F1-score to drop from \texttt{xxx}, \texttt{xxx}, and \texttt{xxx} to \texttt{xxx}, \texttt{xxx}, and \texttt{xxx}, respectively. This indicates that ACG improves HyBinMAS performance by \texttt{xxx}.
+
+Figure~\texttt{xxx}(b) shows that removing EV leads to a decrease of \texttt{xxx} in F1-score, directly proving the contribution of EV to HyBinMAS.
+
+
+
 
 \section{Threats to Validity}
-\textbf{Binary Code Obfuscation}. The HyBinMAS framework is designed to operate on non-obfuscated binary code. In real-world scenarios, particularly with closed-source software, code obfuscation is a prevalent technique for protecting intellectual property. The presence of such obfuscation could potentially limit the practical utility of HyBinMAS for function name recovery in real-world binaries. However, to ensure a fair comparison and maintain a level playing field with the selected baselines, we have excluded obfuscated code from the scope of this study.
+\textbf{Binary Code Obfuscation}. The HyBinMAS framework is designed to operate on non-obfuscated binary code. In real-world scenarios, particularly with closed-source software, code obfuscation is a prevalent technique for protecting intellectual property. The presence of obfuscation could potentially limit the practical utility of HyBinMAS for function name recovery in real-world binaries. However, to ensure a fair comparison and maintain a level playing field with the selected baselines\cite{SymGen, XFL}, we have excluded obfuscated code from the scope of this study.
 
-\textbf{Triggering of Binary Functions}.HyBinMAS employs an interception strategy that activates after a target function has been executed. Consequently, the ability to trigger these functions significantly impacts the completeness of the dynamic information that can be collected, which in turn affects the overall recovery performance. In our experiments, we utilized monkey testing to trigger a wide range of functions. Nevertheless, it is inevitable that some functions that are difficult to reach via random inputs may have been missed. We must emphasize, however, that the specific method for triggering functions is not the central contribution of this work. Our results demonstrate that even with a straightforward approach like monkey testing, HyBinMAS achieves substantial efficacy. The framework is modular, allowing for the substitution of more sophisticated triggering mechanisms, such as fuzzing, which could potentially yield even better results.
+\textbf{Triggering of Binary Functions}.HyBinMAS employs an interception strategy that activates after a target function has been executed. Consequently, the ability to trigger these functions significantly impacts the completeness of the dynamic information that can be collected, which in turn affects the overall recovery performance. In our experiments, we utilized monkey testing to trigger a wide range of functions. Nevertheless, it is inevitable that some functions that are difficult to reach via random inputs may have been missed. We must emphasize, however, that the specific method for triggering functions is not the central contribution of this work. Our results demonstrate that even with a straightforward approach like monkey, HyBinMAS achieves superior effectiveness. The framework is modular, allowing for the substitution of more sophisticated triggering mechanisms, such as fuzzing, which could potentially yield even better results.
 
-\textbf{Data Scale and Diversity}. For RQ2, our dataset comprised over 3,000 functions from six distinct applications. While this scale was sufficient to draw conclusive findings, a more comprehensive evaluation of HyBinMAS's effectiveness would ideally involve a larger and more diverse dataset. We contend, however, that expanding the scale and diversity of such a dataset is a significant challenge. During our data collection process, we discovered that a relatively small proportion of open-source Android applications utilize native code, which resulted in many potential projects being excluded from our final dataset. We leave the curation of a more extensive dataset as an avenue for subsequent research.
+\textbf{Data Scale and Diversity}. For RQ1, our dataset comprised over 3,966 functions from six distinct applications. While this scale was sufficient to draw conclusive findings, a more comprehensive evaluation of HyBinMAS's effectiveness would ideally involve a larger and more diverse dataset. We contend, however, that expanding the scale and diversity of such a dataset is a significant challenge. During our data collection process, we discovered that a relatively small proportion of open-source Android applications utilize native code, which resulted in many potential projects being excluded from our final dataset. We leave the curation of a more extensive dataset as an avenue for subsequent research.
 
-\textbf{Selection of LLM}. In our current experimental setup, we selected the Deepseek-R1 model as the foundational LLM for our method. Given the rapidly evolving landscape of Large Language Models, other state-of-the-art models, including those from the GPT series, could certainly be integrated into our framework. However, due to practical constraints such as token limits and API costs, we have only conducted systematic experiments with Deepseek-R1. A thorough investigation of the impact of different LLMs on performance is therefore designated as an area for future work.
-
-
+\textbf{Selection of LLM}. In our current experimental setup, we selected the Deepseek-R1 model as the foundational LLM for our method. Given the rapidly evolving landscape of Large Language Models, other state-of-the-art models, including GPT-4\cite{GPT} and Gemini2.5\cite{Gemini}, could certainly be integrated into our framework. However, due to practical constraints such as token limits and API costs, we have only conducted systematic experiments with Deepseek-R1. A thorough investigation of the impact of different LLMs on performance is therefore designated as an area for future work.
 
 
 
 \section{Related Work}
 \subsection{Symbol Recovery}
 
-The strip command, a standard utility in toolchains, removes symbol information from binaries, including variable names and type definitions. The absence of this information significantly impedes the comprehension and analysis of binaries. Consequently, a substantial body of research has been dedicated to recovering these symbols. Despite pioneering efforts in this domain (Debin, DIRE, NERO, NFRE, Punstrip, and DIRTY), further research is needed to advance the symbol recovery task.
+The strip command, a standard utility in toolchains, removes symbol information from binaries, including variable names and type definitions. The absence of this information significantly impedes the comprehension and analysis of binaries. Consequently, a substantial body of research has been dedicated to recovering these symbols. Despite pioneering efforts in this domain\cite{DeBin, DIRE, NERO, NFRE, Punstrip, DIRTY}, further research is needed to advance the symbol recovery task.
 
-One major line of research focuses on the recovery of variables and data structures, such as (TypeFSL, ReSym, HyRES, TypeForge). Another significant research direction, which aligns with one of the primary goals of this paper, is the recovery of function names. Meaningful function names provide a global summary of a subroutine's purpose, making them invaluable for program understanding. Recent works such as SymLM and ASMDepictor have leveraged the powerful encoding capabilities of Transformers to convert assembly code into semantic embeddings for predicting function names. To address the practical challenge of out-of-vocabulary (OOV) function names, XFL models the task as a multi-label classification problem, predicting each sub-token of a function name individually. More innovatively, SymGen reformulates function name recovery as a generative task and trains a bespoke LLM for this purpose. This approach effectively resolves the poor generalization caused by the OOV problem in previous methods and achieves results that significantly surpass prior work.
+One major line of research focuses on the recovery of variables and data structures, such as \cite{TypeFSL, ReSym, HyRES, ReSym}. Another significant research direction, which aligns with one of the primary goals of this paper, is the recovery of function names. Meaningful function names provide a global summary of a subroutine's purpose, making them invaluable for program understanding. Recent works such as SymLM\cite{SymLM} and ASMDepictor\cite{AsmDepictor} have leveraged the powerful encoding capabilities of Transformers to convert assembly code into semantic embeddings for predicting function names. To address the practical challenge of out-of-vocabulary (OOV) function names, XFL\cite{XFL} models the task as a multi-label classification problem, predicting each sub-token of a function name individually. More innovatively, SymGen\cite{SymGen} reformulates function name recovery as a generative task and trains a bespoke LLM for this purpose. This approach effectively resolves the poor generalization caused by the OOV problem in previous methods and achieves results that significantly surpass prior work.
 
-While our methodology shares conceptual similarities with Sym-LM's use of dynamic analysis, our approach orchestrates a Multi-Agent system for collaborative reasoning and inference, allowing for a more effective use of dynamic information.
+While our methodology shares conceptual similarities with SymLM's use of dynamic behaviors, our approach orchestrates a Multi-Agent system for collaborative reasoning and inference, allowing for a more effective use of dynamic information.
 
 \subsection{Code Summarization}
-\textbf{Code Summarization}, the task of generating concise natural language descriptions for a given piece of code, is indispensable for program comprehension. The field has primarily focused on source code summarization, for which a wide array of techniques have been developed. These methodologies have evolved from early template-based and information retrieval (IR) approaches to more sophisticated techniques grounded in deep learning. Most recently, the advent of Large Language Models (LLMs) has marked a paradigm shift. LLM-based methods are now considered the state-of-the-art, with studies showing their generated summaries can sometimes even surpass the quality of human-written reference comments.
+\textbf{Code Summarization}, the task of generating concise natural language descriptions for a given piece of code, is indispensable for program comprehension. The field has primarily focused on source code summarization\cite{LLM_cs, multi_intent_LLM, scs_via_LLM, cs_beyond_function, structured_cs_hyctx, statement_cs_LLM}, for which a wide array of techniques have been developed. These methodologies have evolved from early template-based\cite{abid_using_2015, ad-wood-2003} and information retrieval\cite{Eye_Tracking, AutoComment} approaches to more sophisticated techniques grounded in deep learning\cite{deep_cs, DeepCommenter, AST-trans, Alternative_cs, developer_intent_cs}. Most recently, the advent of Large Language Models (LLMs) has marked a paradigm shift. LLM-based methods are now considered the state-of-the-art, with studies showing their generated summaries can sometimes even surpass the quality of human-written reference comments\cite{LLM_cs, cs_chatgpt}.
 
-However, a considerable semantic gap persists when applying LLMs to binary code, as these models often struggle to understand low-level machine instructions without symbolic information. Although some researchers have begun to explore LLM-based binary code summarization, as exemplified by work such as FoC, these pioneering efforts predominantly rely on fine-tuning bespoke models for this specific task. Inspired by the remarkable performance of Multi-Agent systems in solving complex reasoning tasks in other domains, our method leverages a Multi-Agent system to collaboratively guide and enhance an LLM's comprehension and reasoning capabilities over binary code.
+However, a considerable semantic gap persists when applying LLMs to binary code, as these models often struggle to understand low-level machine instructions without symbolic information. Although some researchers have begun to explore LLM-based binary code summarization\cite{FoC}, as exemplified by work such as FoC\cite{FoC}, these pioneering efforts predominantly rely on fine-tuning bespoke models for this specific task. Inspired by the remarkable performance of Multi-Agent systems in solving complex reasoning tasks in other domains, our method leverages a Multi-Agent system to collaboratively guide and enhance an LLM's comprehension and reasoning capabilities over binary code.
 
 
 \subsection{LLM for Binaries}
-LLMs have demonstrated remarkable success across a spectrum of source code-related tasks (). As LLM technology continues to evolve, a growing body of research has started to explore its application in the binary analysis domain, including symbol recovery (e.g., ReSym, HyRES, SymGen) and the improvement of decompilation output (e.g., LLM4Decompile, DeGPT).
+LLMs have demonstrated remarkable success across a spectrum of source code-related tasks\cite{LLM_cs, SimLLM, GPT_test, GPT_beyond_cg, LLM_ct}. As LLM technology continues to evolve, a growing body of research has started to explore its application in the binary analysis domain, including symbol recovery\cite{ReSym, HyRES, SymGen} and the improvement of decompilation output \cite{DeGPT, LLM4Decompile}.
 
-However, for practitioners in the field, such as reverse engineers, a more fundamental challenge lies in the semantic comprehension of the binary code itself. FoC begins to address this critical need, but its approach has two significant limitations: its applicability is confined to the specific domain of cryptographic functions, and it necessitates the fine-tuning of a dedicated LLM. In stark contrast, our method is designed to be domain-agnostic, imposing no restrictions on the type of binary, and obviating the significant computational and data overhead associated with model training.
+However, for practitioners in the field, such as reverse engineers, a more fundamental challenge lies in the semantic comprehension of the binary code itself. SymGen\cite{SymGen} and FoC\cite{FoC} begins to address this critical need, but its approach has two significant limitations: its applicability is confined to the specific domain of cryptographic functions, and it necessitates the fine-tuning of a dedicated LLM. In stark contrast, our method is designed to be domain-agnostic, imposing no restrictions on the type of binary, and obviating the significant computational and data overhead associated with model training.
 
 
 
